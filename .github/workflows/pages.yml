@@ -45,11 +45,13 @@ jobs:
           curl --fail --location --retry 3 "$base/bin/clang.wasm.gz" -o clang/bin/clang.wasm.gz
           curl --fail --location --retry 3 "$base/bin/lld.wasm.gz" -o clang/bin/lld.wasm.gz
           curl --fail --location --retry 3 "$base/bin/sysroot.tar.gz" -o clang/bin/sysroot.tar.gz
-          echo "1420808d0391ff2d8a2fdf2a9f6bbce8f728e06b1ed1651029ed80b226101444  clang/runtime-manifest.v1.json" | sha256sum --check
-          echo "cbca9e27ceafbca840603a39fc71e4f83bfb085237c8eab84fd0401ac76806c7  clang/bin/memfs.wasm.gz" | sha256sum --check
-          echo "b1174438d9a67b7ff11e623541b9a0572c024a9e798084b9b021dd9da2da0874  clang/bin/clang.wasm.gz" | sha256sum --check
-          echo "f842a9b5df3c6d326f0260bfd313c11c2e22bc8b8ae0387deede9a4af55779cd  clang/bin/lld.wasm.gz" | sha256sum --check
-          echo "195e8083bace1baf86014f134a210db354cd77825988eaac7d262161cf496c4f  clang/bin/sysroot.tar.gz" | sha256sum --check
+          curl --fail --location --retry 3 "$base/libc-printscan-long-double.a.gz" -o clang/libc-printscan-long-double.a.gz
+          echo "0b854bc6b41924420cfcc840509ecbe03af3c63ca3edd4940897917e32c8d8ad  clang/runtime-manifest.v1.json" | sha256sum --check
+          echo "a3e43451bc15ae69a7f113009e2ee82ab4db711625c1782cd45d0d3c4d38175a  clang/bin/memfs.wasm.gz" | sha256sum --check
+          echo "cc7b6b229af392f439a1ca89dbb8d5e016792264a0a6ee59608ff24e269be982  clang/bin/clang.wasm.gz" | sha256sum --check
+          echo "798ce825f3e3cf9a695b6a049f157ba28d38731a3dc5e699ccdf23d69d3a5c20  clang/bin/lld.wasm.gz" | sha256sum --check
+          echo "6188b500fa7af2dceadcbd6dcf2619b6935fa94c224c1c2078426666ebea1d50  clang/bin/sysroot.tar.gz" | sha256sum --check
+          echo "b3f11e17e40fb13371a97244fdde00d5bd951ad8e20dfdf88a069167d6be628b  clang/libc-printscan-long-double.a.gz" | sha256sum --check
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
       - name: Upload site artifact

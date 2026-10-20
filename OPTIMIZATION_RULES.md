@@ -43,7 +43,7 @@ The Auto-Optimize preview contains actual source edits. Selecting Apply rewrites
 
 MIRAGE's Clang check uses Clang 22 in WebAssembly to compile and link the selected C/C++ file without executing the resulting artifact. It enables compiler diagnostics and type/syntax validation beyond text-pattern analysis. The toolchain is targeted at wasm32-wasi, not ESP32-S3 Xtensa, and its standard library is not an Arduino/ESP-IDF SDK. Files that include board headers may fail because those headers are absent. This is not an ESP32 firmware build, AST-based optimization proof, benchmark, or RAM map. Static rewrite candidates still require review and target-toolchain validation.
 
-The first check downloads approximately 29 MB of compiler assets. Assets are staged during Pages deployment and verified against pinned SHA-256 hashes. User source is processed in the browser; the compiled artifact is not executed.
+The first check downloads approximately 29 MB of compiler assets. Assets are staged during Pages deployment and verified against six pinned SHA-256 hashes. User source is processed in the browser; the compiled artifact is not executed.
 
 
 Third-party compiler runtime provenance and licensing notes: see [CLANG_WASM_NOTICES.md](CLANG_WASM_NOTICES.md).

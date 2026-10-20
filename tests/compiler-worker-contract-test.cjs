@@ -14,10 +14,14 @@ assert.doesNotMatch(worker, /executeBrowserClangArtifact|toolchain\.execute\(|ru
 assert.match(worker, /int main\(\) \{ return 0; \}/,
   'translation units without main get a harmless linker entry point');
 assert.match(workflow, /sha256sum --check/, 'deployment must verify compiler asset hashes');
-assert.equal((workflow.match(/sha256sum --check/g) || []).length, 5,
-  'all five runtime assets must be hash-checked');
+assert.match(workflow, /libc-printscan-long-double\.a\.gz/,
+  'deployment must include the manifest-referenced long-double support asset');
+assert.equal((workflow.match(/curl --fail/g) || []).length, 6,
+  'deployment must fetch all six compiler runtime assets');
+assert.equal((workflow.match(/sha256sum --check/g) || []).length, 6,
+  'all six runtime assets must be hash-checked');
 assert.match(html, /id="compilerCheckButton"/, 'UI must expose the Clang check');
 assert.match(html, /not the ESP32-S3 Xtensa chip/, 'UI must disclose target mismatch');
 assert.match(app, /new Worker\(new URL\('\.\/compiler-worker\.js'/,
   'compile work must run in a background worker');
-console.log('compiler-worker contract tests passed: 10 checks');
+console.log('compiler-worker contract tests passed: 12 checks');
