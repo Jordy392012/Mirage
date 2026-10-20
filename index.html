@@ -14,6 +14,7 @@
   <script defer src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script src="memory-analyzer.js"></script>
   <script src="benchmark-results.js"></script>
+  <script src="optimization-engine.js"></script>
 <script defer src="app.js"></script>
 </head>
 <body>
@@ -97,7 +98,7 @@
 
         <section class="workbench-section" id="source">
           <div class="section-heading">
-            <div><div class="section-kicker">THE WORKBENCH</div><h2>Project workspace</h2><p>Bring your code. MIRAGE will look for opportunities.</p></div>
+            <div><div class="section-kicker">THE WORKBENCH</div><h2>Project workspace</h2><p>Upload a project, review real source rewrites, compare changes, and export the result.</p></div>
             <div class="project-actions"><button class="ghost-button" id="loadDemoButton" type="button">↻ Load demo</button><button class="ghost-button" id="downloadSourceButton" type="button">↓ Export source</button><button class="ghost-button" id="exportReportButton" type="button">↗ Export report</button></div>
           </div>
 
@@ -166,6 +167,6 @@
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <dialog id="howDialog" class="how-dialog"><form method="dialog"><button class="dialog-close" aria-label="Close dialog">×</button></form><div class="dialog-eyebrow">A QUICK REALITY CHECK</div><h2>What MIRAGE does today</h2><p>This first release is a browser-based static analyzer. It spots patterns worth investigating; it does not compile firmware, run code, or measure execution time yet.</p><div class="dialog-list"><div><span class="dialog-check">✓</span><span><strong>Works now</strong><br>Paste source, import supported files/ZIPs, scan code patterns, estimate matched literal-sized arrays, export a JSON findings report.</span></div><div><span class="dialog-next">↗</span><span><strong>Next milestones</strong><br>Verified source transformations, ESP-IDF compilation, on-device benchmarks, and managed-memory runtime.</span></div></div><p class="dialog-footnote">All analysis runs locally in your browser. The optional ZIP library is loaded from a public CDN.</p><button class="primary-button dialog-done" type="submit">Got it</button></dialog>
+  <dialog id="howDialog" class="how-dialog"><form method="dialog"><button class="dialog-close" aria-label="Close dialog">×</button></form><div class="dialog-eyebrow">A QUICK REALITY CHECK</div><h2>What MIRAGE does today</h2><p>MIRAGE is a browser-based analyzer with an experimental project-wide source-rewrite workflow. It does not compile firmware, run code, or measure execution time.</p><div class="dialog-list"><div><span class="dialog-check">✓</span><span><strong>Works now</strong><br>Import supported source files/ZIPs, scan code patterns, preview and apply a narrow pow/powf exponent-2 rewrite across loaded C/C++ files, undo eligible changes, export a project ZIP, estimate matched array sizes, and export a JSON report.</span></div><div><span class="dialog-next">↗</span><span><strong>Next milestones</strong><br>More proven optimization passes, automated compiler checks, ESP-IDF build integration, and on-device benchmarks.</span></div></div><p class="dialog-footnote">All analysis runs locally in your browser. The optional ZIP library is loaded from a public CDN.</p><button class="primary-button dialog-done" type="submit">Got it</button></dialog>
 </body>
 </html>

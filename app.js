@@ -289,7 +289,7 @@ void loop() {
     const knownSizeArrayCount = arrayObservations.filter(item => Number.isFinite(item.bytes)).length;
     const unknownSizeArrayCount = arrayObservations.filter(item => !Number.isFinite(item.bytes)).length;
     lastReport = {
-      tool: 'MIRAGE Studio', version: '0.4.0', target: 'ESP32-S3', analysisType: 'static heuristic scan', generatedAt: new Date().toISOString(),
+      tool: 'MIRAGE Studio', version: '0.5.0', target: 'ESP32-S3', analysisType: 'static heuristic scan', generatedAt: new Date().toISOString(),
       limitations: ['This report is not compiler output, a linker map, or a hardware benchmark.', 'Array inventory covers a limited set of built-in-type declarations. Unsupported expressions remain unknown; reported bytes are source-level estimates, not total RAM or peak live memory.', 'Storage class and memory-section labels are hints only; verify actual placement with the ESP-IDF linker map and runtime measurements.', 'Findings are heuristics and must be reviewed by a developer.'],
       summary: { files: projectFiles.length, sourceLines: totalSourceLines, findings: findings.length, matchedArrayCount: arrayObservations.length, knownSizeArrayCount, unknownSizeArrayCount, matchedArrayBytes: knownArrayBytes },
       files: projectFiles.map(file => ({ name: file.name, lines: file.content ? file.content.split('\n').length : 0, characters: file.content.length })),
@@ -620,58 +620,133 @@ void loop() {
 
   // Editor events.
   codeInput.addEventListener('input', () => { syncActiveContent(); updateEditorMeta(); });
-  // Transformation preview UI is created in JS to keep the analyzer usable as a static site.
+  // Project-wide Auto-Optimize workflow. Changes remain local in this browser.
   const transformPanel = document.createElement('section');
   transformPanel.id = 'transformPanel';
   transformPanel.hidden = true;
   transformPanel.style.cssText = 'margin-top:14px;padding:16px;border:1px solid #39304f;border-radius:9px;background:#111521;color:#edf1fb';
   transformPanel.innerHTML = `
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
-      <div><div style="font:9px monospace;letter-spacing:1px;color:#a995ff">TRANSFORMATION PREVIEW</div><h3 style="margin:8px 0;font-size:14px">Candidate code rewrites</h3><p id="transformSummary" style="margin:0;color:#9ba8bd;font-size:11px;line-height:1.7"></p></div>
-      <div style="display:flex;gap:8px"><button type="button" id="applyTransformButton" class="primary-button">Apply changes</button><button type="button" id="cancelTransformButton" class="secondary-button">Cancel</button></div>
+      <div><div style="font:9px monospace;letter-spacing:1px;color:#a995ff">MIRAGE AUTO-OPTIMIZE</div><h3 style="margin:8px 0;font-size:16px">Project transformation preview</h3><p id="transformSummary" style="margin:0;color:#9ba8bd;font-size:12px;line-height:1.7"></p></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" id="applyTransformButton" class="primary-button">Apply reviewed changes</button><button type="button" id="exportProjectZipButton" class="secondary-button">Export project ZIP</button><button type="button" id="undoTransformButton" class="secondary-button" disabled>Undo last pass</button><button type="button" id="cancelTransformButton" class="secondary-button">Close</button></div>
     </div>
-    <pre id="transformDiff" style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:240px;overflow:auto;background:#090d15;border:1px solid #252f41;border-radius:6px;padding:12px;font:10px/1.7 monospace;color:#cbd6e8;margin:13px 0 0"></pre>
-    <p style="font-size:9px;line-height:1.7;color:#c6ae7c;margin:10px 0 0">Experimental: replacing pow(x, 2) with x*x can change floating-point edge-case behavior and may not be faster if the compiler already optimizes it. Review, compile, and benchmark before using in firmware.</p>`;
+    <div id="transformResults" style="display:grid;gap:10px;margin-top:14px"></div>
+    <p style="font-size:11px;line-height:1.7;color:#c6ae7c;margin:12px 0 0">Important: this is a conservative source rewrite, not a compiler or proof of equivalent behavior. Build the exported project for your exact board and benchmark it. ZIP export contains the supported source/build-text files currently loaded in MIRAGE, not binaries or omitted dependencies.</p>`;
   const sourcePanel = $('.source-panel');
   if (sourcePanel) sourcePanel.append(transformPanel);
   const transformButton = document.createElement('button');
-  transformButton.type = 'button'; transformButton.className = 'ghost-button'; transformButton.textContent = '⚡ Preview rewrites';
+  transformButton.type = 'button'; transformButton.className = 'primary-button';
+  transformButton.textContent = '⚡ Auto-Optimize project';
   transformButton.style.marginTop = '10px';
   transformButton.id = 'previewTransformButton';
   const editorFooter = $('.source-panel .editor-footer');
   if (editorFooter) editorFooter.insertAdjacentElement('afterend', transformButton);
-  let pendingTransformation = null;
+  let pendingOptimization = null;
+  let lastOptimizationSnapshot = null;
+
+  function renderOptimizationPreview() {
+    const root = $('#transformResults');
+    root.replaceChildren();
+    const resultFiles = pendingOptimization ? pendingOptimization.files : [];
+    const changedFiles = resultFiles.filter(item => item.result.changes.length);
+    const totalChanges = changedFiles.reduce((sum, item) => sum + item.result.changes.length, 0);
+    $('#transformSummary').textContent = totalChanges
+      ? `${totalChanges} candidate rewrite${totalChanges === 1 ? '' : 's'} across ${changedFiles.length} file${changedFiles.length === 1 ? '' : 's'} in a ${projectFiles.length}-file project. Nothing has been changed yet; review the exact before/after text below.`
+      : `No supported candidates found across ${projectFiles.length} loaded file${projectFiles.length === 1 ? '' : 's'}. This first engine pass recognizes pow/powf(variable-or-array-element, 2) only.`;
+    if (!totalChanges) {
+      const empty = document.createElement('div');
+      empty.style.cssText = 'padding:14px;border:1px solid #283348;border-radius:7px;color:#9ba8bd;font-size:12px';
+      empty.textContent = 'No changes proposed. MIRAGE will not invent a speedup when it has no supported rewrite.';
+      root.append(empty);
+    }
+    changedFiles.forEach(({ file, result }) => {
+      const card = document.createElement('article');
+      card.style.cssText = 'border:1px solid #2d3850;border-radius:8px;padding:12px;background:#0c111c;min-width:0';
+      const heading = document.createElement('div');
+      heading.style.cssText = 'font:12px monospace;color:#c8baff;margin-bottom:8px;overflow-wrap:anywhere';
+      heading.textContent = `${file.name} · ${result.changes.length} change${result.changes.length === 1 ? '' : 's'}`;
+      card.append(heading);
+      result.changes.forEach((change, index) => {
+        const item = document.createElement('div');
+        item.style.cssText = 'padding:9px 0;border-top:1px solid #222c3d;font-size:11px;line-height:1.6;overflow-wrap:anywhere';
+        const meta = document.createElement('div'); meta.style.cssText = 'color:#9ba8bd;margin-bottom:5px';
+        meta.textContent = `${index + 1}. Line ${change.line} · ${change.rule}`;
+        const before = document.createElement('div'); before.style.cssText = 'color:#ff9d9d;font-family:monospace'; before.textContent = `− ${change.original}`;
+        const after = document.createElement('div'); after.style.cssText = 'color:#80e5c6;font-family:monospace'; after.textContent = `+ ${change.replacement}`;
+        const reason = document.createElement('p'); reason.style.cssText = 'color:#aab6ca;margin:5px 0 0'; reason.textContent = change.reason;
+        const caution = document.createElement('p'); caution.style.cssText = 'color:#c6ae7c;margin:4px 0 0'; caution.textContent = change.caution;
+        item.append(meta, before, after, reason, caution); card.append(item);
+      });
+      root.append(card);
+    });
+    $('#applyTransformButton').disabled = totalChanges === 0;
+    $('#undoTransformButton').disabled = !lastOptimizationSnapshot;
+  }
+
   transformButton.addEventListener('click', () => {
     syncActiveContent();
-    const file = getActiveFile();
-    if (!file) return;
-    const result = suggestTransformations(file.content);
-    pendingTransformation = result.changes.length ? { fileName: file.name, before: file.content, after: result.source, changes: result.changes } : null;
+    if (!window.MirageOptimizationEngine) { toast('Optimization engine did not load. Reload and try again.', 'error'); return; }
+    const files = projectFiles.map(file => ({ file, result: window.MirageOptimizationEngine.optimizeSource(file.content, file.name) }));
+    pendingOptimization = { files, createdAt: new Date().toISOString() };
     transformPanel.hidden = false;
-    if (!pendingTransformation) {
-      $('#transformSummary').textContent = 'No supported safe-pattern candidates found in this file. Currently this preview handles pow/powf with a literal exponent of 2 only.';
-      $('#transformDiff').textContent = 'No changes proposed.';
-      $('#applyTransformButton').disabled = true;
-    } else {
-      $('#transformSummary').textContent = `${result.changes.length} candidate rewrite${result.changes.length === 1 ? '' : 's'} in ${file.name}. Preview the exact replacements below.`;
-      $('#transformDiff').textContent = result.changes.map((change, index) => `${index + 1}. Line ${result.source.slice(0, change.offset).split('\n').length}\n- ${change.original}\n+ ${change.replacement}`).join('\n\n');
-      $('#applyTransformButton').disabled = false;
-    }
+    renderOptimizationPreview();
     transformPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   });
+
   $('#applyTransformButton').addEventListener('click', () => {
-    if (!pendingTransformation) return;
-    const file = projectFiles.find(item => item.name === pendingTransformation.fileName);
-    if (!file) return;
-    file.content = pendingTransformation.after;
-    if (file.name === activeFileName) codeInput.value = file.content;
+    if (!pendingOptimization) return;
+    const changed = pendingOptimization.files.filter(item => item.result.changes.length);
+    if (!changed.length) return;
+    lastOptimizationSnapshot = changed.map(({ file, result }) => ({ name: file.name, before: file.content, after: result.source }));
+    changed.forEach(({ file, result }) => { file.content = result.source; });
+    const active = getActiveFile();
+    codeInput.value = active ? active.content : '';
     updateEditorMeta();
-    pendingTransformation = null;
+    pendingOptimization = null;
     transformPanel.hidden = true;
     buildAnalysis();
-    toast('Candidate rewrite applied. Export and compile to verify it before using it.');
+    toast(`Applied ${changed.reduce((sum, item) => sum + item.result.changes.length, 0)} candidate rewrite(s) across ${changed.length} file(s). Click Auto-Optimize again to review or undo. Compile and benchmark before keeping them.`);
   });
-  $('#cancelTransformButton').addEventListener('click', () => { pendingTransformation = null; transformPanel.hidden = true; });
+
+  $('#undoTransformButton').addEventListener('click', () => {
+    if (!lastOptimizationSnapshot) return;
+    let restored = 0;
+    let skipped = 0;
+    lastOptimizationSnapshot.forEach(item => {
+      const file = projectFiles.find(candidate => candidate.name === item.name);
+      if (!file) { skipped++; return; }
+      // Avoid overwriting edits made after applying the optimization.
+      if (file.content !== item.after) { skipped++; return; }
+      file.content = item.before; restored++;
+    });
+    const active = getActiveFile(); codeInput.value = active ? active.content : '';
+    updateEditorMeta(); lastOptimizationSnapshot = null; buildAnalysis(); renderOptimizationPreview();
+    toast(`Undo restored ${restored} file(s)${skipped ? `; skipped ${skipped} file(s) with later edits or missing files` : ''}.`);
+  });
+
+  $('#exportProjectZipButton').addEventListener('click', async () => {
+    syncActiveContent();
+    if (!window.JSZip) { toast('ZIP support did not load. Reload and try exporting again.'); return; }
+    if (!projectFiles.length) { toast('Load a project before exporting.'); return; }
+    try {
+      const zip = new window.JSZip();
+      projectFiles.forEach(file => zip.file(file.name, file.content));
+      zip.file('MIRAGE-OPTIMIZATION-NOTES.txt', [
+        'MIRAGE Studio Auto-Optimize export',
+        `Exported: ${new Date().toISOString()}`,
+        `Files included: ${projectFiles.length}`,
+        'This ZIP contains source/build-text files imported into MIRAGE; it does not contain compiled firmware, omitted dependencies, or a compiler result.',
+        'Review all changes, compile for the exact target board, run correctness tests, and benchmark before deploying.'
+      ].join('\n'));
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(blob); const link = document.createElement('a');
+      link.href = url; link.download = 'mirage-optimized-project.zip'; document.body.append(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      toast(`Exported ${projectFiles.length} project file(s) as ZIP.`);
+    } catch (error) { console.error(error); toast('Could not build the project ZIP.', 'error'); }
+  });
+
+  $('#cancelTransformButton').addEventListener('click', () => { pendingOptimization = null; transformPanel.hidden = true; });
 
   codeInput.addEventListener('scroll', () => { lineGutter.scrollTop = codeInput.scrollTop; });
   codeInput.addEventListener('keydown', event => {
