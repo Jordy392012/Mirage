@@ -514,10 +514,108 @@ void loop() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
+  function getBenchmarkRecords() {
+    try {
+      const records = JSON.parse(localStorage.getItem('mirage-benchmark-history-v1') || '[]');
+      return Array.isArray(records) ? records.filter(record => record && record.parsed && record.id) : [];
+    } catch (_) { return []; }
+  }
+
+  function saveBenchmarkRecords(records) {
+    try { localStorage.setItem('mirage-benchmark-history-v1', JSON.stringify(records.slice(0, 30))); return true; }
+    catch (_) { return false; }
+  }
+
+  function setBenchmarkStatus(message, kind = '') {
+    const status = $('#benchmarkImportStatus');
+    status.textContent = message;
+    status.className = `benchmark-import-status${kind ? ` ${kind}` : ''}`;
+  }
+
+  function appendBenchmarkMetric(root, label, value) {
+    const metric = document.createElement('div'); metric.className = 'benchmark-metric';
+    const name = document.createElement('span'); name.textContent = label;
+    const result = document.createElement('strong'); result.textContent = value;
+    metric.append(name, result); root.append(metric);
+  }
+
+  function renderBenchmarkHistory() {
+    const root = $('#benchmarkResultsList');
+    if (!root || !window.MirageBenchmarkResults) return;
+    const api = window.MirageBenchmarkResults;
+    const records = getBenchmarkRecords();
+    $('#benchmarkCount').textContent = String(records.length);
+    root.replaceChildren();
+    if (!records.length) {
+      const empty = document.createElement('div'); empty.className = 'benchmark-empty';
+      empty.textContent = 'No benchmark runs recorded yet. Import the complete Serial Monitor output above; MIRAGE will preserve the raw log with its parsed metrics.';
+      root.append(empty); return;
+    }
+    records.forEach(record => {
+      const assessment = api.assess(record, records);
+      const card = document.createElement('article'); card.className = 'benchmark-record';
+      const top = document.createElement('div'); top.className = 'benchmark-record-top';
+      const titleWrap = document.createElement('div');
+      const title = document.createElement('h4'); title.className = 'benchmark-record-title'; title.textContent = 'powf(x, 2.0f) vs x * x';
+      const date = document.createElement('div'); date.className = 'benchmark-record-meta';
+      const when = record.capturedAt ? new Date(record.capturedAt) : null;
+      date.textContent = `${record.target || 'ESP32-S3'} · ${when && !Number.isNaN(when.getTime()) ? when.toLocaleString() : 'Date not recorded'} · ${record.parsed.trialCount || 0} trial rows`;
+      const config = document.createElement('div'); config.className = 'benchmark-record-meta'; config.textContent = `Build: ${record.buildSettings && record.buildSettings.trim() ? record.buildSettings : 'Not recorded'}`;
+      titleWrap.append(title, date, config);
+      const badge = document.createElement('span'); badge.className = `benchmark-status ${assessment.code}`; badge.textContent = assessment.label;
+      top.append(titleWrap, badge);
+      const metrics = document.createElement('div'); metrics.className = 'benchmark-metrics';
+      appendBenchmarkMetric(metrics, 'Median powf', Number.isFinite(record.parsed.powfMedianUs) ? `${record.parsed.powfMedianUs} µs` : '—');
+      appendBenchmarkMetric(metrics, 'Median multiply', Number.isFinite(record.parsed.multiplyMedianUs) ? `${record.parsed.multiplyMedianUs} µs` : '—');
+      appendBenchmarkMetric(metrics, 'Median ratio', Number.isFinite(record.parsed.ratio) ? `${record.parsed.ratio.toFixed(3)}×` : '—');
+      appendBenchmarkMetric(metrics, 'Checksum', record.parsed.checksumPass === true ? 'PASS' : record.parsed.checksumPass === false ? 'FAIL' : 'Unknown');
+      const explanation = document.createElement('p'); explanation.className = 'benchmark-assessment'; explanation.textContent = assessment.explanation;
+      const heap = document.createElement('p'); heap.className = 'benchmark-record-meta';
+      heap.textContent = `Free heap: ${Number.isFinite(record.parsed.freeHeapBefore) ? record.parsed.freeHeapBefore.toLocaleString() : '—'} → ${Number.isFinite(record.parsed.freeHeapAfter) ? record.parsed.freeHeapAfter.toLocaleString() : '—'} bytes. Heap readings are context, not total RAM or proof of a memory optimization.`;
+      const details = document.createElement('details');
+      const summary = document.createElement('summary'); summary.textContent = 'View original serial log';
+      const raw = document.createElement('pre'); raw.textContent = record.parsed.rawLog || '';
+      details.append(summary, raw);
+      card.append(top, metrics, explanation, heap, details); root.append(card);
+    });
+  }
+
+  function exportBenchmarkHistory() {
+    const records = getBenchmarkRecords();
+    if (!records.length) { setBenchmarkStatus('There are no saved runs to export yet.', 'error'); return; }
+    const exported = records.map(record => ({ ...record, assessment: window.MirageBenchmarkResults.assess(record, records) }));
+    downloadBlob('mirage-benchmark-history.json', JSON.stringify({ tool: 'MIRAGE Studio', schemaVersion: 1, exportedAt: new Date().toISOString(), records: exported }, null, 2), 'application/json;charset=utf-8');
+    setBenchmarkStatus(`Exported ${records.length} benchmark run${records.length === 1 ? '' : 's'} as JSON.`, 'success');
+  }
+
+  function importBenchmarkLog() {
+    const rawLog = $('#benchmarkLog').value.trim();
+    const parsed = window.MirageBenchmarkResults.parseSerialLog(rawLog);
+    if (!parsed.valid) { setBenchmarkStatus(parsed.errors.join(' '), 'error'); return; }
+    const records = getBenchmarkRecords();
+    const target = $('#benchmarkTarget').value.trim() || 'ESP32-S3';
+    const buildSettings = $('#benchmarkSettings').value.trim();
+    records.unshift({ id: `bench-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, capturedAt: new Date().toISOString(), target, buildSettings, parsed });
+    if (!saveBenchmarkRecords(records)) { setBenchmarkStatus('The log parsed, but this browser could not save local history. Check browser storage settings and export/record the output manually.', 'error'); return; }
+    renderBenchmarkHistory();
+    const assessment = window.MirageBenchmarkResults.assess(records[0], records);
+    setBenchmarkStatus(`Recorded ${parsed.trialCount} trial rows. Result: ${assessment.label}.`, 'success');
+    toast('Benchmark result recorded locally.');
+  }
+
+  function clearBenchmarkHistory() {
+    if (!getBenchmarkRecords().length) { setBenchmarkStatus('Benchmark history is already empty.'); return; }
+    if (!window.confirm('Clear all MIRAGE benchmark runs saved in this browser? Export the history first if you want a backup.')) return;
+    try { localStorage.removeItem('mirage-benchmark-history-v1'); renderBenchmarkHistory(); setBenchmarkStatus('Local benchmark history cleared. Exported JSON files are not affected.', 'success'); }
+    catch (_) { setBenchmarkStatus('This browser would not allow local history to be cleared.', 'error'); }
+  }
+
   function exportReport() {
     if (!lastReport) { toast('Run an analysis before exporting a report.'); return; }
+    const benchmarks = getBenchmarkRecords();
+    lastReport.benchmarkEvidence = benchmarks.map(record => ({ ...record, assessment: window.MirageBenchmarkResults.assess(record, benchmarks) }));
     downloadBlob('mirage-analysis-report.json', JSON.stringify(lastReport, null, 2), 'application/json;charset=utf-8');
-    toast('Analysis report exported.');
+    toast('Analysis report exported with benchmark evidence.');
   }
 
   // Editor events.
@@ -605,10 +703,14 @@ void loop() {
     const visible = entries.filter(entry => entry.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
     if (visible) navLinks.forEach(link => link.classList.toggle('active', link.dataset.nav === visible.target.id || (visible.target.id === 'overview' && link.dataset.nav === 'overview')));
   }, { rootMargin: '-15% 0px -70% 0px', threshold: [0, .1, .25] }) : null;
-  ['overview', 'source', 'findings', 'memory'].forEach(id => { const el = document.getElementById(id); if (observer && el) observer.observe(el); });
+  ['overview', 'source', 'findings', 'memory', 'benchmarks'].forEach(id => { const el = document.getElementById(id); if (observer && el) observer.observe(el); });
 
   // Ensure the reset-created snapshot button remains wired to the analyzer.
   $('#exportReportButton')?.addEventListener('click', exportReport);
+  $('#importBenchmarkButton')?.addEventListener('click', importBenchmarkLog);
+  $('#exportBenchmarksButton')?.addEventListener('click', exportBenchmarkHistory);
+  $('#clearBenchmarksButton')?.addEventListener('click', clearBenchmarkHistory);
+  renderBenchmarkHistory();
 
   // Initial demo is intentionally loaded so the first visit shows a useful working example.
   codeInput.value = DEMO_CODE;

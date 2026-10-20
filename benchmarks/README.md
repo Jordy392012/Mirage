@@ -25,3 +25,12 @@ These fixtures begin the measurement stage. They are intentionally narrow: one r
 - This is not a benchmark of the entire MIRAGE app or a substitute for a full ESP-IDF build/linker-map report.
 
 Do not report a speedup until it is measured on the target board. Keep the raw serial logs so results can be reproduced.
+
+## Recording results in MIRAGE Studio
+
+1. After a complete run, copy all Serial Monitor output from the benchmark header through `Benchmark complete.`
+2. Open the [MIRAGE Studio site](https://jordy392012.github.io/Mirage/) and scroll to **Benchmark results**.
+3. Paste the full log, keep the target board accurate, and record the Arduino-ESP32 core version, CPU frequency, and relevant build settings.
+4. Choose **Record benchmark**. Runs are saved in that browser's local storage; they are not uploaded to a server. Export the history JSON for a backup or to share it.
+
+Evidence labels are deliberately conservative. A checksum failure is never treated as a safe optimization. A median ratio within 1% is labelled **No measured improvement**. A larger one-run difference remains a **Candidate**. **Verified for this benchmark setup** requires at least three comparable runs with the same recorded configuration, passing checksum comparisons, a consistent direction, and a difference of at least 3% in each run. These labels apply only to this small benchmark and do not prove a whole-firmware speedup.

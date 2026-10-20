@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="styles.css">
   <script defer src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script src="memory-analyzer.js"></script>
+  <script src="benchmark-results.js"></script>
 <script defer src="app.js"></script>
 </head>
 <body>
@@ -35,6 +36,7 @@
         <a class="nav-link" href="#source" data-nav="source"><span class="nav-icon">⌘</span>Source code</a>
         <a class="nav-link" href="#findings" data-nav="findings"><span class="nav-icon">⌁</span>Optimization findings<span class="nav-count" id="navFindingCount">—</span></a>
         <a class="nav-link" href="#memory" data-nav="memory"><span class="nav-icon">▦</span>Memory analysis</a>
+        <a class="nav-link" href="#benchmarks" data-nav="benchmarks"><span class="nav-icon">◷</span>Benchmark evidence</a>
       </nav>
 
       <p class="nav-caption nav-caption-spaced">PROJECT</p>
@@ -120,6 +122,24 @@
         <section class="findings-section" id="findings">
           <div class="section-heading findings-heading"><div><div class="section-kicker">OPPORTUNITIES</div><h2>Optimization findings <span class="heading-count" id="findingsHeadingCount">0</span></h2><p>Actionable leads for making your firmware leaner and faster.</p></div><div class="filter-buttons" role="group" aria-label="Filter findings"><button class="filter-button active" data-filter="all" type="button">All findings</button><button class="filter-button" data-filter="speed" type="button">↗ Speed</button><button class="filter-button" data-filter="memory" type="button">▦ Memory</button></div></div>
           <div id="findingsList" class="findings-list"><div class="findings-placeholder"><span class="placeholder-symbol">⌁</span><div><strong>Your optimization queue is empty</strong><p>Analyze the project to find potential improvements.</p></div></div></div>
+        </section>
+
+        <section class="benchmark-section" id="benchmarks">
+          <div class="section-heading"><div><div class="section-kicker">MEASURED EVIDENCE</div><h2>Benchmark results</h2><p>Import a complete ESP32-S3 Serial Monitor log. MIRAGE records the measurements locally and labels evidence conservatively.</p></div><span class="roadmap-version">LOCAL HISTORY</span></div>
+          <article class="panel benchmark-import-panel">
+            <div class="panel-heading-row"><h3>Import a benchmark run</h3><span class="mini-label">NO SERVER UPLOAD</span></div>
+            <p class="benchmark-note">Paste the full output from <code>esp32s3_powf_benchmark.ino</code>. MIRAGE parses trial medians, checksums, and heap context; it does not run or compile firmware from this page.</p>
+            <div class="benchmark-form-grid">
+              <label class="benchmark-field" for="benchmarkTarget">Target board<input id="benchmarkTarget" type="text" value="ESP32-S3" maxlength="120"></label>
+              <label class="benchmark-field" for="benchmarkSettings">Build configuration <span>needed for verification</span><input id="benchmarkSettings" type="text" maxlength="300" placeholder="e.g. Arduino-ESP32 core version, CPU frequency, build settings"></label>
+            </div>
+            <label class="benchmark-field benchmark-log-field" for="benchmarkLog">Serial Monitor output<textarea id="benchmarkLog" rows="9" spellcheck="false" placeholder="Paste the complete benchmark output here…"></textarea></label>
+            <div class="benchmark-actions"><button class="primary-button" id="importBenchmarkButton" type="button">＋ Record benchmark</button><button class="secondary-button" id="exportBenchmarksButton" type="button">↓ Export history JSON</button><button class="secondary-button" id="clearBenchmarksButton" type="button">Clear local history</button></div>
+            <p class="benchmark-import-status" id="benchmarkImportStatus" role="status" aria-live="polite">Results are saved in this browser only. Export a JSON backup if you want to keep or share them.</p>
+          </article>
+          <div class="benchmark-history-heading"><h3>Recorded runs</h3><span id="benchmarkCount" class="heading-count">0</span></div>
+          <div id="benchmarkResultsList" class="benchmark-results-list"><div class="findings-placeholder"><span class="placeholder-symbol">◷</span><div><strong>No benchmark runs recorded yet</strong><p>Paste the full Serial Monitor output above to start your evidence log.</p></div></div></div>
+          <p class="benchmark-disclaimer">Evidence labels apply only to this specific benchmark. “Verified” requires at least three comparable runs, passing checksum checks, a consistent direction, a 3% or greater difference, and recorded build settings. It is not a guarantee that the whole firmware will improve.</p>
         </section>
 
         <section class="memory-section" id="memory">

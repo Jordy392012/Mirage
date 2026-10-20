@@ -29,6 +29,8 @@ jobs:
           node-version: 22
       - name: Run MIRAGE regression tests
         run: node tests/analyzer-smoke-test.cjs
+      - name: Run benchmark parser regression tests
+        run: node tests/benchmark-results-test.cjs
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
       - name: Upload site artifact

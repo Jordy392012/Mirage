@@ -13,14 +13,15 @@ MIRAGE's long-term goal is to help developers find ways to make embedded applica
 - Review potential findings categorized by speed or memory.
 - Preview and explicitly apply a narrowly scoped `pow`/`powf`-to-multiplication rewrite for simple identifiers and simple array indexes.
 - Run regression tests locally; GitHub Actions runs those tests before publishing the site.
-- Export a JSON report, or download the active source file.
+- Export a JSON analysis report, or download the active source file.
+- Import complete ESP32-S3 Serial Monitor logs into a local benchmark history, review conservative evidence labels, and export the history as JSON.
 - Use the app as a static GitHub Pages site; no application backend is required for this prototype.
 
 The project ZIP reader is loaded from jsDelivr (JSZip). Source code is read and analyzed in the browser; this app does not upload source code to a MIRAGE server.
 
 ## Benchmarking
 
-The first ESP32-S3 benchmark fixture compares `powf(x, 2.0f)` with `x * x` on-device. See [benchmarks/README.md](benchmarks/README.md) for setup and reporting guidance.
+The first ESP32-S3 benchmark fixture compares `powf(x, 2.0f)` with `x * x` on-device. See [benchmarks/README.md](benchmarks/README.md) for setup and reporting guidance. The Benchmark results panel parses full serial logs and saves them in browser-local storage; it does not upload source code or benchmark logs to a MIRAGE server.
 
 This is a measured experiment, not a guaranteed optimization. Compiler settings can change the result, and the compiler may already optimize the original expression. The sketch's heap readings are not total RAM usage or static memory size.
 
@@ -46,6 +47,7 @@ Run the analyzer smoke tests with Node.js:
 
 ```bash
 node tests/analyzer-smoke-test.cjs
+node tests/benchmark-results-test.cjs
 ```
 
 ## GitHub Pages
@@ -57,7 +59,7 @@ https://jordy392012.github.io/Mirage/
 1. Improve static analysis and add test fixtures.
 2. Add carefully scoped, reviewable transformations with correctness/regression tests.
 3. Integrate a real ESP-IDF build runner and collect build/linker-map metrics.
-4. Add reproducible on-device benchmarks for ESP32-S3 hardware.
+4. Record reproducible on-device ESP32-S3 benchmark evidence and compare repeated runs.
 5. Research automatic optimization search and a managed-memory runtime.
 
 ## Contributing
