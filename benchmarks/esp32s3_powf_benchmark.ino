@@ -6,6 +6,7 @@
 #include <Arduino.h>
 #include <math.h>
 #include <stdint.h>
+#include <esp_random.h>
 
 #if defined(__has_include)
   #if __has_include(<esp_arduino_version.h>)
