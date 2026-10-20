@@ -40,15 +40,9 @@ Run the analyzer smoke tests with Node.js:
 node tests/analyzer-smoke-test.cjs
 ```
 
-## Deploy to GitHub Pages
+## GitHub Pages
 
-1. Create a new GitHub repository (for example, `mirage-studio`).
-2. Upload the contents of this folder to the repository root, including `.github/workflows/pages.yml`.
-3. In the repository, open **Settings → Pages** and set the build/deployment source to **GitHub Actions**.
-4. Push to the `main` branch (or run the workflow from the Actions tab). The included workflow publishes the static site.
-5. When the deployment succeeds, open the Pages URL shown in the workflow's deployment summary.
-
-No API key, database, secrets, or server is needed for this static prototype.
+https://jordy392012.github.io/Mirage/
 
 ## Roadmap
 
