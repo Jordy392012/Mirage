@@ -481,6 +481,8 @@ void loop() {
     const next = new Map(projectFiles.map(file => [file.name, file]));
     parsed.forEach(file => next.set(file.name, file));
     projectFiles = [...next.values()];
+    lastOptimizationSnapshot = null;
+    pendingOptimization = null;
     activeFileName = parsed[0].name;
     const active = getActiveFile();
     codeInput.value = active ? active.content : '';
@@ -491,6 +493,8 @@ void loop() {
 
   function resetDemo() {
     projectFiles = [{ name: DEMO_NAME, content: DEMO_CODE }];
+    lastOptimizationSnapshot = null;
+    pendingOptimization = null;
     activeFileName = DEMO_NAME;
     findings = [];
     lastReport = null;
