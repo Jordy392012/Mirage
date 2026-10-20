@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#080b14">
+  <meta name="description" content="MIRAGE Studio is an experimental browser-based optimizer for ESP32-S3 projects. Inspect code for speed and memory optimization opportunities.">
+  <title>MIRAGE Studio — ESP32-S3 Optimization Lab</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Main navigation">
+      <a class="brand" href="#overview" aria-label="MIRAGE Studio home">
+        <span class="brand-mark"><span></span><span></span><span></span></span>
+        <span class="brand-type">MIRAGE<span>STUDIO</span></span>
+      </a>
+
+      <div class="workspace-switcher">
+        <div class="workspace-avatar">M</div>
+        <div class="workspace-label"><strong>My workspace</strong><span>Local project</span></div>
+        <span class="switch-caret">⌄</span>
+      </div>
+
+      <p class="nav-caption">WORKSPACE</p>
+      <nav class="nav-links">
+        <a class="nav-link active" href="#overview" data-nav="overview"><span class="nav-icon">◫</span>Overview</a>
+        <a class="nav-link" href="#source" data-nav="source"><span class="nav-icon">⌘</span>Source code</a>
+        <a class="nav-link" href="#findings" data-nav="findings"><span class="nav-icon">⌁</span>Optimization findings<span class="nav-count" id="navFindingCount">—</span></a>
+        <a class="nav-link" href="#memory" data-nav="memory"><span class="nav-icon">▦</span>Memory analysis</a>
+      </nav>
+
+      <p class="nav-caption nav-caption-spaced">PROJECT</p>
+      <div class="target-card">
+        <div class="target-chip"><span class="pulse-dot"></span> TARGET DEVICE</div>
+        <div class="target-name">ESP32-S3</div>
+        <div class="target-sub">Xtensa LX7 · dual-core</div>
+        <div class="target-divider"></div>
+        <div class="target-row"><span>Analysis mode</span><span class="target-value">Static</span></div>
+        <div class="target-row"><span>Code privacy</span><span class="privacy-value"><span class="tiny-lock">◆</span> Local</span></div>
+      </div>
+
+      <div class="sidebar-bottom">
+        <div class="engine-status"><span class="status-ring"></span><div><strong>Studio prototype</strong><span>Analysis engine v0.1</span></div></div>
+        <a class="github-link" href="https://github.com/new" target="_blank" rel="noreferrer"><span>↗</span> Create repository <span class="external-mark">↗</span></a>
+      </div>
+    </aside>
+
+    <main class="main-content" id="overview">
+      <header class="topbar">
+        <div class="breadcrumbs"><span>Workspace</span><span class="crumb-slash">/</span><strong id="breadcrumbProject">Untitled project</strong><span class="local-pill"><span></span>LOCAL</span></div>
+        <div class="topbar-actions">
+          <button class="text-button" id="docsButton" type="button"><span class="question-icon">?</span> How it works</button>
+          <a class="github-button" href="https://github.com/new" target="_blank" rel="noreferrer"><span class="github-glyph">⌘</span> Create repo</a>
+        </div>
+      </header>
+
+      <div class="page-wrap">
+        <section class="hero-section">
+          <div class="hero-copy">
+            <div class="eyebrow"><span class="eyebrow-line"></span> THE ESP32-S3 OPTIMIZATION LAB</div>
+            <h1>Make your hardware<br>go <span class="gradient-text">further.</span></h1>
+            <p class="hero-description">Find the bottlenecks. Spend RAM smarter. Discover where your code has room to fly.</p>
+            <div class="hero-actions">
+              <button class="primary-button" id="analyzeButton" type="button"><span class="button-play">▶</span> Analyze project <span class="button-shortcut">↵</span></button>
+              <button class="secondary-button" id="uploadButton" type="button"><span class="upload-symbol">↑</span> Upload files</button>
+              <input id="fileInput" type="file" accept=".c,.cc,.cpp,.cxx,.h,.hh,.hpp,.hxx,.ino,.txt,.zip" multiple hidden>
+            </div>
+            <div class="hero-note"><span class="shield-icon">⬡</span> Your code stays in this browser for static analysis.</div>
+          </div>
+          <div class="hero-visual" aria-label="Illustration of code transformed into optimized execution paths">
+            <div class="visual-orbit orbit-one"></div><div class="visual-orbit orbit-two"></div>
+            <div class="visual-core"><div class="core-grid"></div><div class="core-letter">M</div><div class="core-flare"></div></div>
+            <div class="float-tag tag-top"><span class="tag-dot purple"></span> CODE ANALYSIS <b>01</b></div>
+            <div class="float-tag tag-left"><span class="tag-icon">⌁</span> MEMORY MAP <b>02</b></div>
+            <div class="float-tag tag-right"><span class="tag-icon green">↗</span> OPTIMIZATION <b>03</b></div>
+            <div class="visual-coordinate coord-a">32° 07' S3</div><div class="visual-coordinate coord-b">MIRAGE / LAB_001</div>
+            <svg class="visual-lines" viewBox="0 0 500 330" aria-hidden="true"><path d="M70 190 L165 190 L196 155 L255 155 L293 102 L408 102"/><path d="M110 247 L202 247 L234 215 L320 215 L350 180 L450 180"/><path d="M130 94 L180 94 L210 122 L282 122 L305 144 L382 144"/></svg>
+          </div>
+        </section>
+
+        <section class="metrics-grid" aria-label="Project statistics">
+          <article class="metric-card"><div class="metric-head"><span>FILES IN PROJECT</span><span class="metric-icon purple-icon">▤</span></div><div class="metric-number" id="fileMetric">1</div><div class="metric-foot"><span class="metric-neutral" id="fileMetricDetail">Demo source loaded</span></div></article>
+          <article class="metric-card"><div class="metric-head"><span>SOURCE LINES</span><span class="metric-icon blue-icon">≡</span></div><div class="metric-number" id="lineMetric">—</div><div class="metric-foot"><span class="metric-neutral">Across loaded source</span></div></article>
+          <article class="metric-card"><div class="metric-head"><span>FINDINGS</span><span class="metric-icon amber-icon">⌁</span></div><div class="metric-number" id="findingMetric">—</div><div class="metric-foot"><span class="metric-neutral">Potential improvements</span></div></article>
+          <article class="metric-card"><div class="metric-head"><span>KNOWN ARRAY STORAGE</span><span class="metric-icon green-icon">▦</span></div><div class="metric-number" id="ramMetric">—</div><div class="metric-foot"><span class="metric-neutral">Partial estimate only</span></div></article>
+        </section>
+
+        <section class="workbench-section" id="source">
+          <div class="section-heading">
+            <div><div class="section-kicker">THE WORKBENCH</div><h2>Project workspace</h2><p>Bring your code. MIRAGE will look for opportunities.</p></div>
+            <div class="project-actions"><button class="ghost-button" id="loadDemoButton" type="button">↻ Load demo</button><button class="ghost-button" id="downloadSourceButton" type="button">↓ Export source</button><button class="ghost-button" id="exportReportButton" type="button">↗ Export report</button></div>
+          </div>
+
+          <div class="workbench-grid">
+            <article class="panel source-panel">
+              <div class="panel-topbar"><div class="panel-title"><span class="file-icon">{ }</span><strong>Source editor</strong><span class="file-status-dot"></span><span class="tiny-status">LOCAL EDITOR</span></div><div class="editor-actions"><span id="editorLanguage">C++</span><button class="icon-button" id="clearCodeButton" type="button" title="Clear source" aria-label="Clear source">×</button></div></div>
+              <div class="file-strip"><div class="file-tab active"><span class="code-file-icon">C+</span><span id="activeFileName">main.cpp</span><span class="tab-close">•</span></div><button class="add-file-button" id="addFileButton" type="button" title="Add or upload files">+</button><span class="file-strip-hint" id="fileStripHint">Paste code or open files</span></div>
+              <div class="editor-wrap"><div class="line-gutter" id="lineGutter" aria-hidden="true">1</div><textarea id="codeInput" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" aria-label="C or C++ source code" wrap="off"></textarea><div class="editor-empty" id="editorEmpty" hidden>Paste ESP32-S3 C/C++ here or upload source files.</div></div>
+              <div class="editor-footer"><span><span class="footer-dot"></span> Editor ready</span><span id="editorLineCount">0 lines</span><span>UTF-8</span></div>
+            </article>
+
+            <aside class="panel insight-panel">
+              <div class="insight-header"><div><div class="panel-eyebrow">ANALYSIS SNAPSHOT</div><h3>What we found</h3></div><span class="insight-spark">✳</span></div>
+              <div id="snapshotContent" class="snapshot-content"><div class="empty-snapshot"><div class="empty-orbit">✳</div><strong>Ready when you are</strong><p>Run an analysis to surface potential performance and memory issues in your code.</p><button class="small-primary" id="snapshotAnalyzeButton" type="button">Analyze code →</button></div></div>
+              <div class="snapshot-divider"></div>
+              <div class="confidence-note"><span class="info-outline">i</span><p>These are <strong>static-analysis hints</strong>, not measured speedups. Hardware benchmarks come in a later engine milestone.</p></div>
+            </aside>
+          </div>
+          <div class="upload-dropzone" id="dropZone" tabindex="0" role="button" aria-label="Upload source files or a ZIP project"><div class="drop-icon">↑</div><div class="drop-copy"><strong>Drop your source files here</strong><span>Supports .c, .cpp, .h, .hpp, .ino and project .zip files</span></div><button class="browse-button" id="browseButton" type="button">Browse files</button></div>
+        </section>
+
+        <section class="findings-section" id="findings">
+          <div class="section-heading findings-heading"><div><div class="section-kicker">OPPORTUNITIES</div><h2>Optimization findings <span class="heading-count" id="findingsHeadingCount">0</span></h2><p>Actionable leads for making your firmware leaner and faster.</p></div><div class="filter-buttons" role="group" aria-label="Filter findings"><button class="filter-button active" data-filter="all" type="button">All findings</button><button class="filter-button" data-filter="speed" type="button">↗ Speed</button><button class="filter-button" data-filter="memory" type="button">▦ Memory</button></div></div>
+          <div id="findingsList" class="findings-list"><div class="findings-placeholder"><span class="placeholder-symbol">⌁</span><div><strong>Your optimization queue is empty</strong><p>Analyze the project to find potential improvements.</p></div></div></div>
+        </section>
+
+        <section class="memory-section" id="memory">
+          <div class="section-heading"><div><div class="section-kicker">MEMORY INTELLIGENCE</div><h2>Understand your memory</h2><p>Start with what the source reveals. Runtime heap measurements require a real build and device.</p></div><div class="memory-tag"><span class="memory-tag-dot"></span> SOURCE ESTIMATE</div></div>
+          <div class="memory-grid">
+            <article class="panel memory-summary-panel"><div class="memory-summary-top"><div><span class="panel-eyebrow">DETECTED KNOWN-SIZE ARRAYS</span><div class="memory-big" id="knownArrayTotal">—</div><div class="memory-sub">Known-size array storage matched in source</div></div><div class="memory-symbol">▦</div></div><div class="memory-bar-track"><div class="memory-bar-fill" id="arrayBar" style="width:0%"></div></div><div class="memory-bar-legend"><span>Matched arrays</span><span id="arrayCountLabel">0 detected</span></div><div class="memory-warning"><span>!</span><p>This is <strong>not total RAM usage</strong>. It excludes many stack, heap, library, task, and compiler-dependent allocations.</p></div></article>
+            <article class="panel memory-detail-panel"><div class="panel-heading-row"><h3>Memory risk signals</h3><span class="mini-label">SOURCE SCAN</span></div><div id="memorySignals" class="memory-signals"><div class="signal-empty">Run analysis to inspect memory-related patterns.</div></div></article>
+          </div>
+        </section>
+
+        <section class="roadmap-section" id="roadmap">
+          <div class="section-heading"><div><div class="section-kicker">THE LONG GAME</div><h2>From analyzer to engine</h2><p>MIRAGE grows through measurable milestones, not made-up performance claims.</p></div><span class="roadmap-version">ROADMAP / 0.1</span></div>
+          <div class="roadmap-grid">
+            <article class="roadmap-card completed"><div class="roadmap-step"><span>01</span><span class="step-status">IN PROGRESS</span></div><h3>Browser-based analysis</h3><p>Source editor, project import, static findings, memory pattern scan.</p><div class="roadmap-line"><span style="width:68%"></span></div></article>
+            <article class="roadmap-card"><div class="roadmap-step"><span>02</span><span class="step-status planned">NEXT</span></div><h3>Verified transformations</h3><p>Safe, targeted code changes with regression tests and clear diffs.</p><div class="roadmap-line"><span style="width:8%"></span></div></article>
+            <article class="roadmap-card"><div class="roadmap-step"><span>03</span><span class="step-status planned">PLANNED</span></div><h3>ESP-IDF build runner</h3><p>Compile for ESP32-S3 and collect real build and memory metrics.</p><div class="roadmap-line"><span style="width:0%"></span></div></article>
+            <article class="roadmap-card"><div class="roadmap-step"><span>04</span><span class="step-status planned">RESEARCH</span></div><h3>Optimization search</h3><p>Compare candidates on real hardware and keep only validated wins.</p><div class="roadmap-line"><span style="width:0%"></span></div></article>
+          </div>
+        </section>
+
+        <footer class="footer"><a class="footer-brand" href="#overview"><span class="brand-mark small"><span></span><span></span><span></span></span> MIRAGE STUDIO</a><span>Built for the “wait, my ESP32 can do that?” moment.</span><span class="footer-right">OPEN SOURCE <span class="footer-sep">·</span> EXPERIMENTAL</span></footer>
+      </div>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <dialog id="howDialog" class="how-dialog"><form method="dialog"><button class="dialog-close" aria-label="Close dialog">×</button></form><div class="dialog-eyebrow">A QUICK REALITY CHECK</div><h2>What MIRAGE does today</h2><p>This first release is a browser-based static analyzer. It spots patterns worth investigating; it does not compile firmware, run code, or measure execution time yet.</p><div class="dialog-list"><div><span class="dialog-check">✓</span><span><strong>Works now</strong><br>Paste source, import supported files/ZIPs, scan code patterns, estimate matched literal-sized arrays, export a JSON findings report.</span></div><div><span class="dialog-next">↗</span><span><strong>Next milestones</strong><br>Verified source transformations, ESP-IDF compilation, on-device benchmarks, and managed-memory runtime.</span></div></div><p class="dialog-footnote">All analysis runs locally in your browser. The optional ZIP library is loaded from a public CDN.</p><button class="primary-button dialog-done" type="submit">Got it</button></dialog>
+</body>
+</html>
