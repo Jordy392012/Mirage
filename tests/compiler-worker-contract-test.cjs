@@ -3,8 +3,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const worker = fs.readFileSync(path.join(__dirname, '..', 'compiler-worker.js'), 'utf8');
 const workflow = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'pages.yml'), 'utf8');
-const html = fs.readFileSync(path.join(__dirname, '..', '..', 'index.html'), 'utf8');
-const app = fs.readFileSync(path.join(__dirname, '..', '..', 'app.js'), 'utf8');
+const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+const app = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
 
 assert.match(worker, /runtime\.compileArtifact\(/, 'worker must invoke real Clang compile/link');
 assert.match(worker, /captureCompilerOutput/, 'worker must capture compiler diagnostics');
