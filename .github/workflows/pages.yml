@@ -31,6 +31,8 @@ jobs:
         run: node tests/analyzer-smoke-test.cjs
       - name: Run benchmark parser regression tests
         run: node tests/benchmark-results-test.cjs
+      - name: Run optimization engine regression tests
+        run: node tests/optimization-engine-test.cjs
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
       - name: Upload site artifact

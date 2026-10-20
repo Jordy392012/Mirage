@@ -289,7 +289,7 @@ void loop() {
     const knownSizeArrayCount = arrayObservations.filter(item => Number.isFinite(item.bytes)).length;
     const unknownSizeArrayCount = arrayObservations.filter(item => !Number.isFinite(item.bytes)).length;
     lastReport = {
-      tool: 'MIRAGE Studio', version: '0.5.0', target: 'ESP32-S3', analysisType: 'static heuristic scan', generatedAt: new Date().toISOString(),
+      tool: 'MIRAGE Studio', version: '0.5.1', target: 'ESP32-S3', analysisType: 'static heuristic scan', generatedAt: new Date().toISOString(),
       limitations: ['This report is not compiler output, a linker map, or a hardware benchmark.', 'Array inventory covers a limited set of built-in-type declarations. Unsupported expressions remain unknown; reported bytes are source-level estimates, not total RAM or peak live memory.', 'Storage class and memory-section labels are hints only; verify actual placement with the ESP-IDF linker map and runtime measurements.', 'Findings are heuristics and must be reviewed by a developer.'],
       summary: { files: projectFiles.length, sourceLines: totalSourceLines, findings: findings.length, matchedArrayCount: arrayObservations.length, knownSizeArrayCount, unknownSizeArrayCount, matchedArrayBytes: knownArrayBytes },
       files: projectFiles.map(file => ({ name: file.name, lines: file.content ? file.content.split('\n').length : 0, characters: file.content.length })),
@@ -654,13 +654,12 @@ void loop() {
     const resultFiles = pendingOptimization ? pendingOptimization.files : [];
     const changedFiles = resultFiles.filter(item => item.result.changes.length);
     const totalChanges = changedFiles.reduce((sum, item) => sum + item.result.changes.length, 0);
-    $('#transformSummary').textContent = totalChanges
-      ? `${totalChanges} candidate rewrite${totalChanges === 1 ? '' : 's'} across ${changedFiles.length} file${changedFiles.length === 1 ? '' : 's'} in a ${projectFiles.length}-file project. Nothing has been changed yet; review the exact before/after text below.`
-      : `No supported candidates found across ${projectFiles.length} loaded file${projectFiles.length === 1 ? '' : 's'}. This first engine pass recognizes pow/powf(variable-or-array-element, 2) only.`;
-    if (!totalChanges) {
+    const opportunities = resultFiles.flatMap(({ file, result }) => (result.opportunities || []).map(item => ({ file, item })));
+    $('#transformSummary').textContent = `${totalChanges} candidate rewrite${totalChanges === 1 ? '' : 's'} across ${changedFiles.length} file${changedFiles.length === 1 ? '' : 's'}; ${opportunities.length} optimization hint${opportunities.length === 1 ? '' : 's'} across ${projectFiles.length} loaded file${projectFiles.length === 1 ? '' : 's'}. Review all suggestions; no performance gain is assumed.`;
+    if (!totalChanges && !opportunities.length) {
       const empty = document.createElement('div');
       empty.style.cssText = 'padding:14px;border:1px solid #283348;border-radius:7px;color:#9ba8bd;font-size:12px';
-      empty.textContent = 'No changes proposed. MIRAGE will not invent a speedup when it has no supported rewrite.';
+      empty.textContent = 'No known patterns found in these files. This does not mean the project is fully optimized; more analysis rules will be added over time.';
       root.append(empty);
     }
     changedFiles.forEach(({ file, result }) => {
@@ -668,7 +667,7 @@ void loop() {
       card.style.cssText = 'border:1px solid #2d3850;border-radius:8px;padding:12px;background:#0c111c;min-width:0';
       const heading = document.createElement('div');
       heading.style.cssText = 'font:12px monospace;color:#c8baff;margin-bottom:8px;overflow-wrap:anywhere';
-      heading.textContent = `${file.name} · ${result.changes.length} change${result.changes.length === 1 ? '' : 's'}`;
+      heading.textContent = `${file.name} · ${result.changes.length} candidate rewrite${result.changes.length === 1 ? '' : 's'}`;
       card.append(heading);
       result.changes.forEach((change, index) => {
         const item = document.createElement('div');
@@ -683,6 +682,22 @@ void loop() {
       });
       root.append(card);
     });
+    if (opportunities.length) {
+      const adviceSection = document.createElement('section');
+      adviceSection.style.cssText = 'border:1px solid #35415a;border-radius:8px;padding:12px;background:#101827';
+      const title = document.createElement('h4'); title.style.cssText = 'margin:0 0 8px;font-size:13px;color:#d7d0ff';
+      title.textContent = 'Optimization opportunities to investigate'; adviceSection.append(title);
+      const note = document.createElement('p'); note.style.cssText = 'font-size:11px;line-height:1.6;color:#9ba8bd;margin:0 0 8px';
+      note.textContent = 'These are static heuristics, not automatic edits or proof of a bottleneck. Inspect the actual control flow and benchmark before changing behavior.'; adviceSection.append(note);
+      opportunities.forEach(({ file, item }) => {
+        const entry = document.createElement('div'); entry.style.cssText = 'border-top:1px solid #283348;padding:9px 0;font-size:11px;line-height:1.6';
+        const head = document.createElement('div'); head.style.cssText = 'color:#e5dfff;font-weight:600'; head.textContent = `${file.name}:${item.line} · ${item.title}`;
+        const reason = document.createElement('p'); reason.style.cssText = 'color:#aab6ca;margin:4px 0'; reason.textContent = item.reason;
+        const suggestion = document.createElement('p'); suggestion.style.cssText = 'color:#80e5c6;margin:4px 0 0'; suggestion.textContent = `Investigate: ${item.suggestion}`;
+        entry.append(head, reason, suggestion); adviceSection.append(entry);
+      });
+      root.append(adviceSection);
+    }
     $('#applyTransformButton').disabled = totalChanges === 0;
     $('#undoTransformButton').disabled = !lastOptimizationSnapshot;
   }

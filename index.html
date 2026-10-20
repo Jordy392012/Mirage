@@ -14,8 +14,8 @@
   <script defer src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script src="memory-analyzer.js"></script>
   <script src="benchmark-results.js"></script>
-  <script src="optimization-engine.js"></script>
-<script defer src="app.js"></script>
+  <script src="optimization-engine.js?v=0.2.0"></script>
+<script defer src="app.js?v=0.5.1"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -167,6 +167,6 @@
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <dialog id="howDialog" class="how-dialog"><form method="dialog"><button class="dialog-close" aria-label="Close dialog">×</button></form><div class="dialog-eyebrow">A QUICK REALITY CHECK</div><h2>What MIRAGE does today</h2><p>MIRAGE is a browser-based analyzer with an experimental project-wide source-rewrite workflow. It does not compile firmware, run code, or measure execution time.</p><div class="dialog-list"><div><span class="dialog-check">✓</span><span><strong>Works now</strong><br>Import supported source files/ZIPs, scan code patterns, preview and apply a narrow pow/powf exponent-2 rewrite across loaded C/C++ files, undo eligible changes, export a project ZIP, estimate matched array sizes, and export a JSON report.</span></div><div><span class="dialog-next">↗</span><span><strong>Next milestones</strong><br>More proven optimization passes, automated compiler checks, ESP-IDF build integration, and on-device benchmarks.</span></div></div><p class="dialog-footnote">All analysis runs locally in your browser. The optional ZIP library is loaded from a public CDN.</p><button class="primary-button dialog-done" type="submit">Got it</button></dialog>
+  <dialog id="howDialog" class="how-dialog"><form method="dialog"><button class="dialog-close" aria-label="Close dialog">×</button></form><div class="dialog-eyebrow">A QUICK REALITY CHECK</div><h2>What MIRAGE does today</h2><p>MIRAGE is a browser-based analyzer with an experimental project-wide source-rewrite workflow. It does not compile firmware, run code, or measure execution time.</p><div class="dialog-list"><div><span class="dialog-check">✓</span><span><strong>Works now</strong><br>Import supported source files/ZIPs, scan code patterns, preview and apply several conservative source-rewrite candidates across loaded C/C++ files, inspect optimization hints for loops, math, serial output, allocations and buffers, undo eligible changes, export a project ZIP, estimate matched array sizes, and export a JSON report.</span></div><div><span class="dialog-next">↗</span><span><strong>Next milestones</strong><br>More validated optimization passes, compiler checks, ESP-IDF build integration, and on-device benchmarks.</span></div></div><p class="dialog-footnote">All analysis runs locally in your browser. The optional ZIP library is loaded from a public CDN.</p><button class="primary-button dialog-done" type="submit">Got it</button></dialog>
 </body>
 </html>
