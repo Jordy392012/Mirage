@@ -35,6 +35,12 @@ assert.equal(context.arrayObservations.length, 1, 'one array should be inventori
 assert.equal(context.arrayObservations[0].bytes, 8192, 'uint16_t[4096] should estimate 8192 bytes');
 
 context.arrayObservations = [];
+const namedSize = `constexpr int N = 1000;\nfloat samples[N];\nfloat results[N];\nfloat matrix[2][N];`;
+context.analyzeFile({ name: 'named-size.cpp', content: namedSize });
+assert.equal(context.arrayObservations.length, 3, 'named constant dimensions should be inventoried');
+assert.equal(context.arrayObservations.reduce((sum, item) => sum + item.bytes, 0), 16000, 'two float[N] arrays and float[2][N] should estimate 16000 bytes');
+
+context.arrayObservations = [];
 const independent = `void work() {\n for (int i=0;i<4;i++) { use(i); }\n for (int j=0;j<4;j++) { use(j); }\n}\n`;
 const independentResult = context.analyzeFile({ name: 'independent.cpp', content: independent });
 assert.ok(!independentResult.some(finding => finding.id === 'nested-loop'), 'separate loops must not be labeled nested');
@@ -44,3 +50,38 @@ const stringResult = context.analyzeFile({ name: 'strlen.cpp', content: stringLo
 assert.ok(stringResult.some(finding => finding.id === 'strlen-loop'), 'strlen in a loop condition should be detected');
 
 console.log('MIRAGE analyzer smoke tests passed (3 cases).');
+
+
+// Transformation regression tests. These guard the supported syntax and known hazards.
+const transformStart = app.indexOf('  function maskNonCode(source) {');
+const transformEnd = app.indexOf('\n\n  let arrayObservations = [];', transformStart);
+assert.ok(transformStart >= 0 && transformEnd > transformStart, 'could not locate transformation helpers');
+const transformSource = app.slice(transformStart, transformEnd).trim() + '\nthis.suggestTransformations = suggestTransformations;';
+const transformContext = {};
+vm.createContext(transformContext);
+vm.runInContext(transformSource, transformContext);
+const transform = transformContext.suggestTransformations;
+
+const multiple = transform('float x = powf(samples[i], 2.0f);\nfloat y = pow(value, 2);');
+assert.equal(multiple.changes.length, 2, 'pow/powf with supported exponent-2 forms should be offered');
+assert.ok(multiple.source.includes('(samples[i] * samples[i])'), 'simple array element should be rewritten');
+assert.ok(multiple.source.includes('(value * value)'), 'identifier should be rewritten');
+assert.equal(transform(multiple.source).changes.length, 0, 'applying the transformation should be idempotent');
+
+const unsafeSource = 'float a = powf(samples[i++], 2.0f);\nfloat b = powf(getValue(), 2.0f);';
+const unsafe = transform(unsafeSource);
+assert.equal(unsafe.changes.length, 0, 'side-effecting indexes and function-call operands must not be rewritten');
+assert.equal(unsafe.source, unsafeSource, 'unsupported code must remain byte-for-byte unchanged');
+
+const prose = '// powf(value, 2.0f) in a comment\nconst char* text = "pow(value, 2)"; /* powf(other, 2) */\nfloat z = powf(realValue, 2.0f);';
+const proseResult = transform(prose);
+assert.equal(proseResult.changes.length, 1, 'comments and quoted strings must be ignored');
+assert.ok(proseResult.source.includes('// powf(value, 2.0f) in a comment'), 'line comment must remain unchanged');
+assert.ok(proseResult.source.includes('"pow(value, 2)"'), 'quoted string must remain unchanged');
+assert.ok(proseResult.source.includes('float z = (realValue * realValue);'), 'real code should still be transformed');
+
+const edgeCases = transform('powf(value, 2.5f); powf(value, exponent); powf(table[ i ], 2.0f);');
+assert.equal(edgeCases.changes.length, 1, 'unsupported exponents should be skipped while simple indexed arrays are supported');
+assert.ok(edgeCases.source.includes('(table[ i ] * table[ i ])'), 'simple indexed array should be rewritten');
+
+console.log('MIRAGE analyzer and transformation regression tests passed.');
