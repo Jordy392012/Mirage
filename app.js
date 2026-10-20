@@ -194,12 +194,24 @@ void loop() {
     const copyMatch = /\b(?:memcpy|memmove)\s*\(/.exec(source);
     if (copyMatch) add('memory-copy', 'speed', 'low', 'Memory-copy operation detected', 'Large or repeated copies can consume time and create extra peak-memory demand.', 'Check whether the copy is needed, whether buffers can be reused, or whether the consumer can process the source directly. Do not remove copies that protect aliasing or ownership.', copyMatch.index);
 
-    const allocationArrayRegex = /(?:^|[;{}\n])\s*(?:(?:static|constexpr|const|volatile|PROGMEM|extern|inline)\s+)*(unsigned\s+)?(char|short(?:\s+int)?|int|long(?:\s+int)?|float|double|bool|byte|size_t|u?int(?:8|16|32|64)_t)\s+([A-Za-z_]\w*)\s*((?:\s*\[\s*\d+\s*\])+)(?:\s*=\s*[^;]*)?\s*;/g;
+    // Resolve simple integer constants so declarations such as float buffer[N] are counted.
+    // This is deliberately a small source heuristic, not a full C++ preprocessor/parser.
+    const integerConstants = new Map();
+    const constantRegex = /\b(?:(?:static|inline)\s+)*(?:constexpr|const)\s+(?:(?:unsigned|signed)\s+)?(?:char|short(?:\s+int)?|int|long(?:\s+int)?|size_t|u?int(?:8|16|32|64)_t)\s+([A-Za-z_]\w*)\s*=\s*(\d+)\s*;/g;
+    let constantMatch;
+    while ((constantMatch = constantRegex.exec(source)) !== null) {
+      const value = Number(constantMatch[2]);
+      if (Number.isSafeInteger(value) && value > 0) integerConstants.set(constantMatch[1], value);
+    }
+
+    const allocationArrayRegex = /(?:^|[;{}\n])\s*(?:(?:static|constexpr|const|volatile|PROGMEM|extern|inline)\s+)*(unsigned\s+)?(char|short(?:\s+int)?|int|long(?:\s+int)?|float|double|bool|byte|size_t|u?int(?:8|16|32|64)_t)\s+([A-Za-z_]\w*)\s*((?:\s*\[\s*(?:\d+|[A-Za-z_]\w*)\s*\])+)(?:\s*=\s*[^;]*)?\s*;/g;
     const seen = new Set();
     let match;
     while ((match = allocationArrayRegex.exec(source)) !== null) {
       const type = `${match[1] ? 'unsigned ' : ''}${match[2]}`.replace(/\s+/g, ' ').trim();
-      const dims = [...match[4].matchAll(/\[\s*(\d+)\s*\]/g)].map(part => Number(part[1]));
+      const dimTokens = [...match[4].matchAll(/\[\s*(\d+|[A-Za-z_]\w*)\s*\]/g)].map(part => part[1]);
+      const dims = dimTokens.map(token => /^\d+$/.test(token) ? Number(token) : integerConstants.get(token));
+      if (dims.some(value => value === undefined)) continue;
       if (!dims.length || dims.some(n => !Number.isSafeInteger(n) || n < 1)) continue;
       const byteType = TYPE_BYTES[type] ?? TYPE_BYTES[match[2]];
       if (!byteType) continue;
