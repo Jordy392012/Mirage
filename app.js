@@ -235,17 +235,76 @@ void loop() {
     return list;
   }
 
-  // Conservative first transformation: only a single identifier/array-element base
-  // and a literal exponent of exactly 2.0. It is a candidate rewrite, not a guarantee
-  // of identical floating-point edge-case behavior or a measured speedup.
+  // Conservative source rewrite: only identifiers or array elements with a simple
+  // identifier/integer index are supported. Comments and quoted literals are masked
+  // before matching so examples in prose are never rewritten. This is still a
+  // lightweight lexer, not a complete C++ parser or proof of semantic equivalence.
+  function maskNonCode(source) {
+    const chars = source.split('');
+    let state = 'code';
+    let quote = '';
+    for (let i = 0; i < source.length; i++) {
+      const ch = source[i];
+      const next = source[i + 1];
+      if (state === 'code') {
+        if (ch === '/' && next === '/') {
+          chars[i] = chars[i + 1] = ' ';
+          i++;
+          state = 'line-comment';
+        } else if (ch === '/' && next === '*') {
+          chars[i] = chars[i + 1] = ' ';
+          i++;
+          state = 'block-comment';
+        } else if (ch === '"' || ch === "'") {
+          quote = ch;
+          chars[i] = ' ';
+          state = 'quoted';
+        }
+      } else if (state === 'line-comment') {
+        if (ch === '\n') state = 'code';
+        else chars[i] = ' ';
+      } else if (state === 'block-comment') {
+        if (ch === '*' && next === '/') {
+          chars[i] = chars[i + 1] = ' ';
+          i++;
+          state = 'code';
+        } else if (ch !== '\n' && ch !== '\r') chars[i] = ' ';
+      } else if (state === 'quoted') {
+        if (ch === '\\') {
+          chars[i] = ' ';
+          if (i + 1 < source.length) {
+            if (source[i + 1] !== '\n' && source[i + 1] !== '\r') chars[i + 1] = ' ';
+            i++;
+          }
+        } else if (ch === quote) {
+          chars[i] = ' ';
+          state = 'code';
+        } else if (ch !== '\n' && ch !== '\r') chars[i] = ' ';
+      }
+    }
+    return chars.join('');
+  }
+
+  // This is a candidate rewrite, not a guarantee of identical floating-point edge
+  // behavior or a measured speedup. Restricting array indices avoids duplicating
+  // side effects such as i++ or function calls when the operand is evaluated twice.
   function suggestTransformations(source) {
     const changes = [];
-    const pattern = /\b(powf?)\s*\(\s*([A-Za-z_]\w*(?:\s*\[[^\]\n]+\])?)\s*,\s*2(?:\.0f?|f)?\s*\)/g;
-    const optimized = source.replace(pattern, (whole, fn, operand, offset) => {
-      const replacement = `(${operand.trim()} * ${operand.trim()})`;
-      changes.push({ original: whole, replacement, offset });
-      return replacement;
-    });
+    const masked = maskNonCode(source);
+    const pattern = /\b(powf?)\s*\(\s*([A-Za-z_]\w*(?:\s*\[\s*(?:[A-Za-z_]\w*|\d+)\s*\])?)\s*,\s*2(?:\.0f?|f)?\s*\)/g;
+    let match;
+    while ((match = pattern.exec(masked)) !== null) {
+      const operand = match[2].trim();
+      changes.push({
+        original: source.slice(match.index, match.index + match[0].length),
+        replacement: `(${operand} * ${operand})`,
+        offset: match.index
+      });
+    }
+    let optimized = source;
+    for (const change of [...changes].reverse()) {
+      optimized = optimized.slice(0, change.offset) + change.replacement + optimized.slice(change.offset + change.original.length);
+    }
     return { source: optimized, changes };
   }
 
