@@ -4,15 +4,19 @@
 
 MIRAGE's long-term goal is to help developers find ways to make embedded applications faster and handle larger working sets with limited physical RAM. This repository is the first UI + static-analysis prototype, not yet an optimizing compiler.
 
-## What works in v0.1
+## What works in v0.3
 
 - Paste and edit C/C++ source in the browser.
 - Import supported source/build files individually or import a ZIP project archive.
 - Switch between imported files and analyze the currently loaded project together.
 - Run heuristic scans for selected patterns such as nested-loop candidates, `pow()` calls, serial logging, Arduino `String`, dynamic allocation, explicit waits, memory copies, and literal-sized arrays.
 - Review potential findings categorized by speed or memory.
+- Preview and explicitly apply a narrowly scoped `pow`/`powf`-to-multiplication rewrite for simple identifiers and simple array indexes.
+- Run regression tests locally; GitHub Actions runs those tests before publishing the site.
 - Export a JSON report, or download the active source file.
 - Use the app as a static GitHub Pages site; no application backend is required for this prototype.
+
+The project ZIP reader is loaded from jsDelivr (JSZip). Source code is read and analyzed in the browser; this app does not upload source code to a MIRAGE server.
 
 The project ZIP reader is loaded from jsDelivr (JSZip). Source code is read and analyzed in the browser; this app does not upload source code to a MIRAGE server.
 
