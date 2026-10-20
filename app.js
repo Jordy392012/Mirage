@@ -235,6 +235,20 @@ void loop() {
     return list;
   }
 
+  // Conservative first transformation: only a single identifier/array-element base
+  // and a literal exponent of exactly 2.0. It is a candidate rewrite, not a guarantee
+  // of identical floating-point edge-case behavior or a measured speedup.
+  function suggestTransformations(source) {
+    const changes = [];
+    const pattern = /\b(powf?)\s*\(\s*([A-Za-z_]\w*(?:\s*\[[^\]\n]+\])?)\s*,\s*2(?:\.0f?|f)?\s*\)/g;
+    const optimized = source.replace(pattern, (whole, fn, operand, offset) => {
+      const replacement = `(${operand.trim()} * ${operand.trim()})`;
+      changes.push({ original: whole, replacement, offset });
+      return replacement;
+    });
+    return { source: optimized, changes };
+  }
+
   let arrayObservations = [];
 
   function buildAnalysis() {
@@ -437,6 +451,59 @@ void loop() {
 
   // Editor events.
   codeInput.addEventListener('input', () => { syncActiveContent(); updateEditorMeta(); });
+  // Transformation preview UI is created in JS to keep the analyzer usable as a static site.
+  const transformPanel = document.createElement('section');
+  transformPanel.id = 'transformPanel';
+  transformPanel.hidden = true;
+  transformPanel.style.cssText = 'margin-top:14px;padding:16px;border:1px solid #39304f;border-radius:9px;background:#111521;color:#edf1fb';
+  transformPanel.innerHTML = `
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
+      <div><div style="font:9px monospace;letter-spacing:1px;color:#a995ff">TRANSFORMATION PREVIEW</div><h3 style="margin:8px 0;font-size:14px">Candidate code rewrites</h3><p id="transformSummary" style="margin:0;color:#9ba8bd;font-size:11px;line-height:1.7"></p></div>
+      <div style="display:flex;gap:8px"><button type="button" id="applyTransformButton" class="primary-button">Apply changes</button><button type="button" id="cancelTransformButton" class="secondary-button">Cancel</button></div>
+    </div>
+    <pre id="transformDiff" style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:240px;overflow:auto;background:#090d15;border:1px solid #252f41;border-radius:6px;padding:12px;font:10px/1.7 monospace;color:#cbd6e8;margin:13px 0 0"></pre>
+    <p style="font-size:9px;line-height:1.7;color:#c6ae7c;margin:10px 0 0">Experimental: replacing pow(x, 2) with x*x can change floating-point edge-case behavior and may not be faster if the compiler already optimizes it. Review, compile, and benchmark before using in firmware.</p>`;
+  const sourcePanel = $('.source-panel');
+  if (sourcePanel) sourcePanel.append(transformPanel);
+  const transformButton = document.createElement('button');
+  transformButton.type = 'button'; transformButton.className = 'ghost-button'; transformButton.textContent = '⚡ Preview rewrites';
+  transformButton.style.marginTop = '10px';
+  transformButton.id = 'previewTransformButton';
+  const editorFooter = $('.source-panel .editor-footer');
+  if (editorFooter) editorFooter.insertAdjacentElement('afterend', transformButton);
+  let pendingTransformation = null;
+  transformButton.addEventListener('click', () => {
+    syncActiveContent();
+    const file = getActiveFile();
+    if (!file) return;
+    const result = suggestTransformations(file.content);
+    pendingTransformation = result.changes.length ? { fileName: file.name, before: file.content, after: result.source, changes: result.changes } : null;
+    transformPanel.hidden = false;
+    if (!pendingTransformation) {
+      $('#transformSummary').textContent = 'No supported safe-pattern candidates found in this file. Currently this preview handles pow/powf with a literal exponent of 2 only.';
+      $('#transformDiff').textContent = 'No changes proposed.';
+      $('#applyTransformButton').disabled = true;
+    } else {
+      $('#transformSummary').textContent = `${result.changes.length} candidate rewrite${result.changes.length === 1 ? '' : 's'} in ${file.name}. Preview the exact replacements below.`;
+      $('#transformDiff').textContent = result.changes.map((change, index) => `${index + 1}. Line ${result.source.slice(0, change.offset).split('\n').length}\n- ${change.original}\n+ ${change.replacement}`).join('\n\n');
+      $('#applyTransformButton').disabled = false;
+    }
+    transformPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
+  $('#applyTransformButton').addEventListener('click', () => {
+    if (!pendingTransformation) return;
+    const file = projectFiles.find(item => item.name === pendingTransformation.fileName);
+    if (!file) return;
+    file.content = pendingTransformation.after;
+    if (file.name === activeFileName) codeInput.value = file.content;
+    updateEditorMeta();
+    pendingTransformation = null;
+    transformPanel.hidden = true;
+    buildAnalysis();
+    toast('Candidate rewrite applied. Export and compile to verify it before using it.');
+  });
+  $('#cancelTransformButton').addEventListener('click', () => { pendingTransformation = null; transformPanel.hidden = true; });
+
   codeInput.addEventListener('scroll', () => { lineGutter.scrollTop = codeInput.scrollTop; });
   codeInput.addEventListener('keydown', event => {
     if (event.key === 'Tab') { event.preventDefault(); const start = codeInput.selectionStart; const end = codeInput.selectionEnd; codeInput.setRangeText('  ', start, end, 'end'); syncActiveContent(); updateEditorMeta(); }
