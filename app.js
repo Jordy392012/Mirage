@@ -730,7 +730,7 @@ void loop() {
     output.textContent = '';
     const started = performance.now();
     try {
-      compilerWorker = new Worker(new URL('./compiler-worker.js', window.location.href), { type: 'module' });
+      compilerWorker = new Worker(new URL('./compiler-worker.js?v=0.2.0', window.location.href), { type: 'module' });
     } catch (error) {
       button.disabled = false;
       button.textContent = '⌁ Clang check';

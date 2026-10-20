@@ -15,7 +15,7 @@
   <script src="memory-analyzer.js"></script>
   <script src="benchmark-results.js"></script>
   <script src="optimization-engine.js?v=0.4.0"></script>
-<script defer src="app.js?v=0.6.0"></script>
+<script defer src="app.js?v=0.6.1"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -122,7 +122,7 @@
 
         <section class="findings-section compiler-check-section" id="compiler-check">
           <div class="section-heading findings-heading">
-            <div><div class="section-kicker">CLANG / LLVM</div><h2>Compiler-backed check</h2><p>Runs a real Clang compile/link check in a browser WebAssembly sandbox. The first run downloads about 29 MB of compiler assets. Your source stays in this browser; MIRAGE does not execute the compiled program.</p></div>
+            <div><div class="section-kicker">CLANG / LLVM</div><h2>Compiler-backed check</h2><p>Runs a real Clang compile/link check plus AST-backed loop analysis in a browser WebAssembly sandbox. The first run downloads about 29 MB of compiler assets. Your source stays in this browser; MIRAGE does not execute the compiled program.</p></div>
             <div class="compiler-badge">C / C++ · Clang 22</div>
           </div>
           <div class="compiler-target-note"><strong>Important target limit:</strong> this compiler targets <code>wasm32-wasi</code>, not the ESP32-S3 Xtensa chip. Arduino/ESP-IDF headers and third-party board libraries are not included, so board-specific files may report missing headers. A passing check is not an ESP32 firmware build.</div>

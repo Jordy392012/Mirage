@@ -75,7 +75,9 @@ MIT. See [`LICENSE`](LICENSE).
 
 MIRAGE can run a real Clang 22 compile/link check in a WebAssembly worker for the currently selected C/C++ file. The compiler assets are downloaded on demand from the deployed site's clang/ path; GitHub Actions fetches them and verifies six pinned SHA-256 digests during deployment. Source text is passed to the local browser worker and is not uploaded to a compiler service. The worker deliberately compiles but does not execute the generated program.
 
-**Important:** this bundled Clang toolchain targets wasm32-wasi, not ESP32-S3 Xtensa. It is useful for portable C/C++ syntax, type, and warning checks, but it is not a firmware build. Arduino/ESP-IDF headers, board-specific libraries, target ABI, Xtensa code generation, flash/RAM maps, and actual hardware performance are not represented. A failure caused by a missing board header is not necessarily a bug in the source; a passing check does not prove that the ESP32 firmware will build.
+**Important:** this bundled Clang toolchain targets wasm32-wasi, not ESP32-S3 Xtensa. It is useful for portable C/C++ syntax, type, warning, and limited AST-backed loop-pattern checks, but it is not a firmware build. Arduino/ESP-IDF headers, board-specific libraries, target ABI, Xtensa code generation, flash/RAM maps, and actual hardware performance are not represented. A failure caused by a missing board header is not necessarily a bug in the source; a passing check does not prove that the ESP32 firmware will build.
 
 
 Third-party compiler runtime provenance and licensing notes: see [CLANG_WASM_NOTICES.md](CLANG_WASM_NOTICES.md).
+
+The optional AST pass looks for repeated arithmetic expressions, function calls, and array accesses inside braced loops in include-free source files up to 100 KB. These are review hints only; calls and array reads are never auto-cached, and the pass does not prove loop invariance or performance gains.

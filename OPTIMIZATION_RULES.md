@@ -47,3 +47,8 @@ The first check downloads approximately 29 MB of compiler assets. Assets are sta
 
 
 Third-party compiler runtime provenance and licensing notes: see [CLANG_WASM_NOTICES.md](CLANG_WASM_NOTICES.md).
+
+
+## Clang AST loop findings
+
+When the selected file compiles and contains no include directives (and is no larger than 100 KB), MIRAGE also asks Clang for a JSON syntax tree and scans parsed braced loops for repeated arithmetic expressions, function calls, and array accesses. Findings include source lines and Clang-reported expression types where available. The AST pass is skipped conservatively when the source includes headers because the browser toolchain does not bundle the ESP32 SDK or arbitrary project include paths. These findings are not proofs of loop invariance, side-effect freedom, or speedup. The AST pass never rewrites code; the separate narrow rewrite engine still requires review and target-toolchain validation.
