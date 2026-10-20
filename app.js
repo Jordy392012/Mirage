@@ -702,6 +702,82 @@ void loop() {
     $('#undoTransformButton').disabled = !lastOptimizationSnapshot;
   }
 
+
+  let compilerWorker = null;
+  let compilerTimeout = null;
+  function runClangCheck() {
+    syncActiveContent();
+    const file = getActiveFile();
+    const status = $('#compilerStatus');
+    const output = $('#compilerOutput');
+    if (!file || !file.content.trim()) {
+      status.textContent = 'Load or select a non-empty C/C++ source file first.';
+      output.hidden = true;
+      return;
+    }
+    if (!/\.(?:c|cc|cpp|cxx|h|hh|hpp|hxx|ino)$/i.test(file.name)) {
+      status.textContent = 'Clang check supports C/C++ source and header files only.';
+      output.hidden = true;
+      return;
+    }
+    if (compilerWorker) compilerWorker.terminate();
+    clearTimeout(compilerTimeout);
+    const button = $('#compilerCheckButton');
+    button.disabled = true;
+    button.textContent = 'Loading Clang…';
+    status.textContent = 'Starting Clang in a background worker. First run downloads roughly 29 MB of compiler assets; this may take a few minutes.';
+    output.hidden = true;
+    output.textContent = '';
+    const started = performance.now();
+    try {
+      compilerWorker = new Worker(new URL('./compiler-worker.js', window.location.href), { type: 'module' });
+    } catch (error) {
+      button.disabled = false;
+      button.textContent = '⌁ Clang check';
+      status.textContent = 'Could not start the compiler worker: ' + error.message;
+      return;
+    }
+    compilerTimeout = setTimeout(() => {
+      if (compilerWorker) compilerWorker.terminate();
+      compilerWorker = null;
+      button.disabled = false;
+      button.textContent = '⌁ Clang check';
+      status.textContent = 'Compiler check timed out after 120 seconds. Try a smaller/standalone file or use the target ESP32 toolchain for the full project.';
+    }, 120000);
+    compilerWorker.onmessage = event => {
+      const result = event.data || {};
+      if (result.type === 'progress') {
+        status.textContent = result.message || 'Loading compiler…';
+        return;
+      }
+      clearTimeout(compilerTimeout);
+      if (compilerWorker) compilerWorker.terminate();
+      compilerWorker = null;
+      button.disabled = false;
+      button.textContent = '⌁ Clang check';
+      const elapsed = ((performance.now() - started) / 1000).toFixed(1);
+      status.textContent = result.ok
+        ? 'Clang compile/link check passed in ' + (result.compileMs || elapsed + ' s') + '. No program code was executed. Target: wasm32-wasi, not ESP32.'
+        : 'Clang check did not pass. This can indicate a real C/C++ error or unsupported ESP32/Arduino headers. Elapsed: ' + elapsed + ' s.';
+      output.hidden = false;
+      output.textContent = (result.diagnostics || '').trim() || (result.ok
+        ? 'No compiler diagnostics. The file compiled successfully for wasm32-wasi.'
+        : 'No compiler diagnostics were captured. ' + (result.error || 'See the limitations above.'));
+      $('#compiler-check').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    };
+    compilerWorker.onerror = event => {
+      clearTimeout(compilerTimeout);
+      if (compilerWorker) compilerWorker.terminate();
+      compilerWorker = null;
+      button.disabled = false;
+      button.textContent = '⌁ Clang check';
+      status.textContent = 'Compiler worker failed to load: ' + (event.message || 'unknown error');
+    };
+    compilerWorker.postMessage({ type: 'compile', source: file.content, filename: file.name });
+  }
+
+  $('#compilerCheckButton').addEventListener('click', runClangCheck);
+
   transformButton.addEventListener('click', () => {
     syncActiveContent();
     if (!window.MirageOptimizationEngine) { toast('Optimization engine did not load. Reload and try again.', 'error'); return; }

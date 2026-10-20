@@ -37,3 +37,13 @@ MIRAGE now reports repeated function-call patterns and repeated simple array acc
 The automatic arithmetic rewrite is deliberately limited. It only considers expressions made of a simple identifier or numeric literal joined by multiplication, addition, or subtraction; identifier operands must have an explicit scalar const declaration in the current lexical block and must not be visibly assigned in the loop body. It rejects nested control flow, calls, conditional operators, short-circuit operators, volatile, and division. C++ macros, aliasing, exceptions, target compiler details, and some language semantics remain outside its model. The generated const auto temporary requires C++11 or later.
 
 The Auto-Optimize preview contains actual source edits. Selecting Apply rewrites to editor changes the in-browser project text; export the project ZIP to save it. MIRAGE still does not compile firmware or measure runtime/RAM from the browser. Compile for the exact board, run correctness tests, inspect the diff, and benchmark on hardware before accepting changes.
+
+
+## Experimental Clang-backed compile check
+
+MIRAGE's Clang check uses Clang 22 in WebAssembly to compile and link the selected C/C++ file without executing the resulting artifact. It enables compiler diagnostics and type/syntax validation beyond text-pattern analysis. The toolchain is targeted at wasm32-wasi, not ESP32-S3 Xtensa, and its standard library is not an Arduino/ESP-IDF SDK. Files that include board headers may fail because those headers are absent. This is not an ESP32 firmware build, AST-based optimization proof, benchmark, or RAM map. Static rewrite candidates still require review and target-toolchain validation.
+
+The first check downloads approximately 29 MB of compiler assets. Assets are staged during Pages deployment and verified against pinned SHA-256 hashes. User source is processed in the browser; the compiled artifact is not executed.
+
+
+Third-party compiler runtime provenance and licensing notes: see [CLANG_WASM_NOTICES.md](CLANG_WASM_NOTICES.md).

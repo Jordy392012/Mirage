@@ -15,7 +15,7 @@
   <script src="memory-analyzer.js"></script>
   <script src="benchmark-results.js"></script>
   <script src="optimization-engine.js?v=0.4.0"></script>
-<script defer src="app.js?v=0.5.2"></script>
+<script defer src="app.js?v=0.6.0"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -99,7 +99,7 @@
         <section class="workbench-section" id="source">
           <div class="section-heading">
             <div><div class="section-kicker">THE WORKBENCH</div><h2>Project workspace</h2><p>Upload a project, review real source rewrites, compare changes, and export the result.</p></div>
-            <div class="project-actions"><button class="ghost-button" id="loadDemoButton" type="button">↻ Load demo</button><button class="ghost-button" id="downloadSourceButton" type="button">↓ Export source</button><button class="ghost-button" id="exportReportButton" type="button">↗ Export report</button></div>
+            <div class="project-actions"><button class="ghost-button" id="compilerCheckButton" type="button">⌁ Clang check</button><button class="ghost-button" id="loadDemoButton" type="button">↻ Load demo</button><button class="ghost-button" id="downloadSourceButton" type="button">↓ Export source</button><button class="ghost-button" id="exportReportButton" type="button">↗ Export report</button></div>
           </div>
 
           <div class="workbench-grid">
@@ -118,6 +118,16 @@
             </aside>
           </div>
           <div class="upload-dropzone" id="dropZone" tabindex="0" role="button" aria-label="Upload source files or a ZIP project"><div class="drop-icon">↑</div><div class="drop-copy"><strong>Drop your source files here</strong><span>Supports .c, .cpp, .h, .hpp, .ino and project .zip files</span></div><button class="browse-button" id="browseButton" type="button">Browse files</button></div>
+        </section>
+
+        <section class="findings-section compiler-check-section" id="compiler-check">
+          <div class="section-heading findings-heading">
+            <div><div class="section-kicker">CLANG / LLVM</div><h2>Compiler-backed check</h2><p>Runs a real Clang compile/link check in a browser WebAssembly sandbox. The first run downloads about 29 MB of compiler assets. Your source stays in this browser; MIRAGE does not execute the compiled program.</p></div>
+            <div class="compiler-badge">C / C++ · Clang 22</div>
+          </div>
+          <div class="compiler-target-note"><strong>Important target limit:</strong> this compiler targets <code>wasm32-wasi</code>, not the ESP32-S3 Xtensa chip. Arduino/ESP-IDF headers and third-party board libraries are not included, so board-specific files may report missing headers. A passing check is not an ESP32 firmware build.</div>
+          <div id="compilerStatus" class="compiler-status" role="status" aria-live="polite">Ready. Select a C/C++ source file, then choose “Clang check”.</div>
+          <pre id="compilerOutput" class="compiler-output" hidden></pre>
         </section>
 
         <section class="findings-section" id="findings">

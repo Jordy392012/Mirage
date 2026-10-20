@@ -33,6 +33,23 @@ jobs:
         run: node tests/benchmark-results-test.cjs
       - name: Run optimization engine regression tests
         run: node tests/optimization-engine-test.cjs
+      - name: Run compiler worker contract tests
+        run: node tests/compiler-worker-contract-test.cjs
+      - name: Fetch and verify pinned Clang WebAssembly assets
+        run: |
+          set -euo pipefail
+          mkdir -p clang/bin
+          base="https://seorii.page/wasm-idle/clang"
+          curl --fail --location --retry 3 "$base/runtime-manifest.v1.json" -o clang/runtime-manifest.v1.json
+          curl --fail --location --retry 3 "$base/bin/memfs.wasm.gz" -o clang/bin/memfs.wasm.gz
+          curl --fail --location --retry 3 "$base/bin/clang.wasm.gz" -o clang/bin/clang.wasm.gz
+          curl --fail --location --retry 3 "$base/bin/lld.wasm.gz" -o clang/bin/lld.wasm.gz
+          curl --fail --location --retry 3 "$base/bin/sysroot.tar.gz" -o clang/bin/sysroot.tar.gz
+          echo "1420808d0391ff2d8a2fdf2a9f6bbce8f728e06b1ed1651029ed80b226101444  clang/runtime-manifest.v1.json" | sha256sum --check
+          echo "cbca9e27ceafbca840603a39fc71e4f83bfb085237c8eab84fd0401ac76806c7  clang/bin/memfs.wasm.gz" | sha256sum --check
+          echo "b1174438d9a67b7ff11e623541b9a0572c024a9e798084b9b021dd9da2da0874  clang/bin/clang.wasm.gz" | sha256sum --check
+          echo "f842a9b5df3c6d326f0260bfd313c11c2e22bc8b8ae0387deede9a4af55779cd  clang/bin/lld.wasm.gz" | sha256sum --check
+          echo "195e8083bace1baf86014f134a210db354cd77825988eaac7d262161cf496c4f  clang/bin/sysroot.tar.gz" | sha256sum --check
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
       - name: Upload site artifact
