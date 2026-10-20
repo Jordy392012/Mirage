@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 require('../optimization-engine.js');
 const engine = global.MirageOptimizationEngine;
-assert.equal(engine.version, '0.3.0');
+assert.equal(engine.version, '0.4.0');
 const tests = [
   ['square', 'float a = powf(x, 2);', '(x * x)', 'power-two-to-multiply'],
   ['square decimal exponent', 'float a = pow(values[i], 2.0);', '(values[i] * values[i])', 'power-two-to-multiply'],
@@ -55,4 +55,54 @@ const commentedRepeat = engine.optimizeSource(
 assert.ok(!commentedRepeat.opportunities.some(item => item.id === 'repeated-loop-expression'),
   'comments must not count as repeated arithmetic');
 
-console.log('optimization-engine tests passed:', tests.length + 9, 'checks');
+console.log('optimization-engine tests passed: 27 checks');
+
+const cacheableLoop = engine.optimizeSource(
+  'void loop() { const float scale = 0.5f; for (int i=0; i<10; ++i) { out[i] = scale * 2.0f; other[i] = scale * 2.0f; } }',
+  'loop.cpp'
+);
+assert.ok(cacheableLoop.changes.some(change => change.id === 'cache-repeated-loop-arithmetic'),
+  'should generate an actual cached temporary for repeated arithmetic with const scalar operands');
+assert.ok(cacheableLoop.changes.filter(change => change.id === 'replace-repeated-loop-arithmetic').length >= 2,
+  'should replace each repeated arithmetic occurrence');
+assert.ok(cacheableLoop.source.includes('const auto _mirage_cached_1 = scale * 2.0f;'),
+  'should insert a real temporary declaration into the rewritten source');
+assert.ok(!cacheableLoop.source.includes('other[i] = scale * 2.0f'),
+  'should replace repeated expression uses in the output source');
+
+const mutableLoop = engine.optimizeSource(
+  'void loop() { float scale = 0.5f; for (int i=0; i<10; ++i) { out[i] = scale * 2.0f; other[i] = scale * 2.0f; } }',
+  'loop.cpp'
+);
+assert.ok(!mutableLoop.changes.some(change => change.id === 'cache-repeated-loop-arithmetic'),
+  'must not cache expressions using non-const operands');
+
+const conditionalLoop = engine.optimizeSource(
+  'void loop() { const float scale = 0.5f; for (int i=0; i<10; ++i) { if (ready) out[i] = scale * 2.0f; other[i] = scale * 2.0f; } }',
+  'loop.cpp'
+);
+assert.ok(!conditionalLoop.changes.some(change => change.id === 'cache-repeated-loop-arithmetic'),
+  'must not cache arithmetic in conditional/nested control flow');
+
+const functionAndArray = engine.optimizeSource(
+  'void loop() { for (int i=0; i<10; ++i) { float a = sinf(angle); float b = sinf(angle); float x = values[i]; float y = values[i]; } }',
+  'loop.cpp'
+);
+assert.ok(functionAndArray.opportunities.some(item => item.id === 'repeated-loop-call' && item.confidence),
+  'should report repeated function calls with confidence');
+assert.ok(functionAndArray.opportunities.some(item => item.id === 'repeated-array-access' && item.confidence),
+  'should report repeated array accesses with confidence');
+
+const unrelatedConst = engine.optimizeSource(
+  'void first() { const float scale = 0.5f; } void loop() { float scale = 0.5f; for (int i=0; i<10; ++i) { out[i] = scale * 2.0f; other[i] = scale * 2.0f; } }',
+  'loop.cpp'
+);
+assert.ok(!unrelatedConst.changes.some(change => change.id === 'cache-repeated-loop-arithmetic'),
+  'a const declaration from another function must not authorize a rewrite');
+
+const nameCollision = engine.optimizeSource(
+  'void loop() { const float scale = 0.5f; float _mirage_cached_1 = 9; for (int i=0; i<10; ++i) { out[i] = scale * 2.0f; other[i] = scale * 2.0f; } }',
+  'loop.cpp'
+);
+assert.ok(nameCollision.source.includes('const auto _mirage_cached_2 = scale * 2.0f;'),
+  'generated temporary names must not collide with identifiers already in the source');

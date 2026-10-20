@@ -632,7 +632,7 @@ void loop() {
   transformPanel.innerHTML = `
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
       <div><div style="font:9px monospace;letter-spacing:1px;color:#a995ff">MIRAGE AUTO-OPTIMIZE</div><h3 style="margin:8px 0;font-size:16px">Project transformation preview</h3><p id="transformSummary" style="margin:0;color:#9ba8bd;font-size:12px;line-height:1.7"></p></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" id="applyTransformButton" class="primary-button">Apply reviewed changes</button><button type="button" id="exportProjectZipButton" class="secondary-button">Export project ZIP</button><button type="button" id="undoTransformButton" class="secondary-button" disabled>Undo last pass</button><button type="button" id="cancelTransformButton" class="secondary-button">Close</button></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" id="applyTransformButton" class="primary-button">Apply rewrites to editor</button><button type="button" id="exportProjectZipButton" class="secondary-button">Export project ZIP</button><button type="button" id="undoTransformButton" class="secondary-button" disabled>Undo last pass</button><button type="button" id="cancelTransformButton" class="secondary-button">Close</button></div>
     </div>
     <div id="transformResults" style="display:grid;gap:10px;margin-top:14px"></div>
     <p style="font-size:11px;line-height:1.7;color:#c6ae7c;margin:12px 0 0">Important: this is a conservative source rewrite, not a compiler or proof of equivalent behavior. Build the exported project for your exact board and benchmark it. ZIP export contains the supported source/build-text files currently loaded in MIRAGE, not binaries or omitted dependencies.</p>`;
@@ -655,7 +655,7 @@ void loop() {
     const changedFiles = resultFiles.filter(item => item.result.changes.length);
     const totalChanges = changedFiles.reduce((sum, item) => sum + item.result.changes.length, 0);
     const opportunities = resultFiles.flatMap(({ file, result }) => (result.opportunities || []).map(item => ({ file, item })));
-    $('#transformSummary').textContent = `${totalChanges} candidate rewrite${totalChanges === 1 ? '' : 's'} across ${changedFiles.length} file${changedFiles.length === 1 ? '' : 's'}; ${opportunities.length} optimization hint${opportunities.length === 1 ? '' : 's'} across ${projectFiles.length} loaded file${projectFiles.length === 1 ? '' : 's'}. Review all suggestions; no performance gain is assumed.`;
+    $('#transformSummary').textContent = String(totalChanges) + ' source edit' + (totalChanges === 1 ? '' : 's') + ' ready to apply across ' + changedFiles.length + ' file' + (changedFiles.length === 1 ? '' : 's') + '; ' + opportunities.length + ' confidence-scored analysis finding' + (opportunities.length === 1 ? '' : 's') + '. Applying edits changes the in-browser source; it does not compile firmware or guarantee a speedup.';
     if (!totalChanges && !opportunities.length) {
       const empty = document.createElement('div');
       empty.style.cssText = 'padding:14px;border:1px solid #283348;border-radius:7px;color:#9ba8bd;font-size:12px';
@@ -673,7 +673,7 @@ void loop() {
         const item = document.createElement('div');
         item.style.cssText = 'padding:9px 0;border-top:1px solid #222c3d;font-size:11px;line-height:1.6;overflow-wrap:anywhere';
         const meta = document.createElement('div'); meta.style.cssText = 'color:#9ba8bd;margin-bottom:5px';
-        meta.textContent = `${index + 1}. Line ${change.line} · ${change.rule}`;
+        meta.textContent = (index + 1) + '. Line ' + change.line + ' · ' + change.rule + ' · ' + String(change.confidence || 'medium').toUpperCase() + ' CONFIDENCE';
         const before = document.createElement('div'); before.style.cssText = 'color:#ff9d9d;font-family:monospace'; before.textContent = `− ${change.original}`;
         const after = document.createElement('div'); after.style.cssText = 'color:#80e5c6;font-family:monospace'; after.textContent = `+ ${change.replacement}`;
         const reason = document.createElement('p'); reason.style.cssText = 'color:#aab6ca;margin:5px 0 0'; reason.textContent = change.reason;
@@ -688,10 +688,10 @@ void loop() {
       const title = document.createElement('h4'); title.style.cssText = 'margin:0 0 8px;font-size:13px;color:#d7d0ff';
       title.textContent = 'Optimization opportunities to investigate'; adviceSection.append(title);
       const note = document.createElement('p'); note.style.cssText = 'font-size:11px;line-height:1.6;color:#9ba8bd;margin:0 0 8px';
-      note.textContent = 'These are static heuristics, not automatic edits or proof of a bottleneck. Inspect the actual control flow and benchmark before changing behavior.'; adviceSection.append(note);
+      note.textContent = 'Findings include confidence labels but remain lexical heuristics, not proof. Rewrites above are real source edits; findings below are not auto-applied because calls and array reads may have side effects or changing values.';
       opportunities.forEach(({ file, item }) => {
         const entry = document.createElement('div'); entry.style.cssText = 'border-top:1px solid #283348;padding:9px 0;font-size:11px;line-height:1.6';
-        const head = document.createElement('div'); head.style.cssText = 'color:#e5dfff;font-weight:600'; head.textContent = `${file.name}:${item.line} · ${item.title}`;
+        head.textContent = file.name + ':' + item.line + ' · ' + item.title + ' · ' + String(item.confidence || 'low').toUpperCase() + ' CONFIDENCE';
         const reason = document.createElement('p'); reason.style.cssText = 'color:#aab6ca;margin:4px 0'; reason.textContent = item.reason;
         const suggestion = document.createElement('p'); suggestion.style.cssText = 'color:#80e5c6;margin:4px 0 0'; suggestion.textContent = `Investigate: ${item.suggestion}`;
         entry.append(head, reason, suggestion); adviceSection.append(entry);
@@ -724,7 +724,7 @@ void loop() {
     pendingOptimization = null;
     transformPanel.hidden = true;
     buildAnalysis();
-    toast(`Applied ${changed.reduce((sum, item) => sum + item.result.changes.length, 0)} candidate rewrite(s) across ${changed.length} file(s). Click Auto-Optimize again to review or undo. Compile and benchmark before keeping them.`);
+    toast('Applied ' + changed.reduce((sum, item) => sum + item.result.changes.length, 0) + ' source edit(s) across ' + changed.length + ' file(s). The editor source has changed; review, compile, test, and benchmark before keeping the result.');
   });
 
   $('#undoTransformButton').addEventListener('click', () => {

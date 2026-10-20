@@ -41,7 +41,7 @@
     const out = [];
     const add = (id, title, severity, reason, suggestion, pattern) => {
       const match = pattern.exec(masked);
-      if (match) out.push({ id, title, severity, line: lineAt(source, match.index), reason, suggestion });
+      if (match) out.push({ id, title, severity, confidence: 'low', line: lineAt(source, match.index), reason, suggestion });
     };
     add('math-in-loop', 'Expensive math near a loop', 'medium',
       'A loop and a math-library call occur close together. If the inputs are invariant across iterations, repeated work may be avoidable.',
@@ -118,6 +118,7 @@
           id: 'repeated-loop-expression',
           title: 'Repeated arithmetic inside a loop',
           severity: 'medium',
+          confidence: 'medium',
           line: lineAt(source, entry.offset),
           reason: 'The same simple arithmetic expression appears multiple times in one braced loop body, and its named operands are not visibly assigned in that body.',
           suggestion: 'Review whether this expression can be computed once and reused. Check scope, operand lifetime, pointer/reference writes, volatile data, side effects, control flow, integer overflow and floating-point behavior first. This is not an automatic rewrite or a proof of loop invariance.'
@@ -125,6 +126,156 @@
       }
     }
     return out;
+  }
+
+
+  function findFunctionAwareOpportunities(source, masked) {
+    const out = [];
+    const loopPattern = /\b(for|while)\s*\([^)]*\)\s*\{/g;
+    const assignedPattern = /(?:\+\+|--)?\s*([A-Za-z_]\w*)\s*(?:\+\+|--|(?:[+\-*/%]?=)(?!=|>))/g;
+    const callPattern = /\b([A-Za-z_]\w*)\s*\(([^()]{0,100})\)/g;
+    const arrayPattern = /\b([A-Za-z_]\w*)\s*\[\s*([A-Za-z_]\w*|\d+)\s*\]/g;
+    const ignoredCalls = new Set(['if','for','while','switch','sizeof','catch','return']);
+    let loop;
+    while ((loop = loopPattern.exec(masked)) !== null) {
+      const open = loop.index + loop[0].lastIndexOf('{');
+      let depth = 1, close = open + 1;
+      for (; close < masked.length && depth > 0; close++) {
+        if (masked[close] === '{') depth++;
+        else if (masked[close] === '}') depth--;
+      }
+      if (depth !== 0) continue;
+      const bodyStart = open + 1, body = masked.slice(bodyStart, close - 1);
+      const assigned = new Set();
+      let a;
+      while ((a = assignedPattern.exec(body)) !== null) assigned.add(a[1]);
+      const calls = new Map();
+      let c;
+      while ((c = callPattern.exec(body)) !== null) {
+        if (ignoredCalls.has(c[1])) continue;
+        const key = c[1] + '(' + c[2].replace(/\s+/g, ' ').trim() + ')';
+        if (!calls.has(key)) calls.set(key, { count: 0, offset: bodyStart + c.index, name: c[1] });
+        calls.get(key).count++;
+      }
+      const repeatedCall = [...calls.entries()].find(([, item]) => item.count >= 2);
+      if (repeatedCall) {
+        const [call, item] = repeatedCall;
+        const knownPure = /^(?:fabsf?|sqrtf?|sinf?|cosf?|tanf?|floorf?|ceilf?|roundf?|strlen)$/.test(item.name);
+        const stableArgs = ![...assigned].some(name => new RegExp('\\b' + name + '\\b').test(call));
+        out.push({
+          id: 'repeated-loop-call', title: 'Repeated function call inside a loop',
+          severity: 'medium', confidence: knownPure && stableArgs ? 'medium' : 'low',
+          line: lineAt(source, item.offset),
+          reason: 'The same call appears at least twice in one loop body. Its implementation may have side effects, read changing state, or already be optimized by the compiler.',
+          suggestion: knownPure && stableArgs
+            ? 'The call resembles a common math/string routine and its named arguments are not visibly assigned in this loop. MIRAGE only caches a narrow subset of simple arithmetic; inspect function purity and data lifetime before changing calls.'
+            : 'Inspect the function implementation and its arguments. No call is automatically cached because purity and side effects cannot be proven by this lexical scan.'
+        });
+      }
+      const arrays = new Map();
+      let ar;
+      while ((ar = arrayPattern.exec(body)) !== null) {
+        const key = ar[0].replace(/\s+/g, '');
+        if (!arrays.has(key)) arrays.set(key, { count: 0, offset: bodyStart + ar.index, name: ar[1], index: ar[2] });
+        arrays.get(key).count++;
+      }
+      const repeatedArray = [...arrays.entries()].find(([, item]) => item.count >= 2);
+      if (repeatedArray) {
+        const [access, item] = repeatedArray;
+        const indexStable = !assigned.has(item.index);
+        const arrayWritten = new RegExp('(?:\\b' + item.name + '\\s*\\[[^\\]]+\\]\\s*(?:[+\\-*/%]?=|\\+\\+|--)|\\b' + item.name + '\\s*\\[[^\\]]+\\]\\s*\\+\\+)').test(body);
+        out.push({
+          id: 'repeated-array-access', title: 'Repeated array access inside a loop',
+          severity: 'low', confidence: indexStable && !arrayWritten ? 'medium' : 'low',
+          line: lineAt(source, item.offset),
+          reason: 'The same simple array element is referenced repeatedly in this loop. Aliases, pointer writes, volatile storage, and compiler optimization are not fully visible here.',
+          suggestion: indexStable && !arrayWritten
+            ? 'Check whether the element is unchanged between reads and whether the compiler already keeps it in a register. MIRAGE does not cache array elements automatically because that can change behavior when the element is written through an alias.'
+            : 'The index or array appears to be written in the loop, so caching could change behavior. Keep the accesses unless a full control-flow review proves otherwise.'
+        });
+      }
+    }
+    return out;
+  }
+
+  // Performs a narrow structural rewrite only for repeated, unconditional arithmetic
+  // using explicit const scalar operands and literals. It deliberately avoids calls,
+  // array accesses, nested control flow, division, volatile data, and mutable operands.
+  function findStructuralRewrites(source, masked) {
+    const changes = [];
+    const declarationPattern = /\bconst\s+(?:(?:unsigned|signed|long|short)\s+)*(?:char|int|float|double|bool|size_t|uint\d+_t|int\d+_t)\s+([A-Za-z_]\w*)\s*=/g;
+    const loopPattern = /\b(for|while)\s*\([^)]*\)\s*\{/g;
+    let loopIndex = 0, loop;
+    while ((loop = loopPattern.exec(masked)) !== null) {
+      const open = loop.index + loop[0].lastIndexOf('{');
+      let depth = 1, close = open + 1;
+      for (; close < masked.length && depth > 0; close++) {
+        if (masked[close] === '{') depth++;
+        else if (masked[close] === '}') depth--;
+      }
+      if (depth !== 0) continue;
+      const bodyStart = open + 1, bodyEnd = close - 1;
+      const body = masked.slice(bodyStart, bodyEnd);
+      // Restrict const evidence to the current lexical block; declarations from an unrelated function must not authorize a rewrite.
+      const scopeStart = Math.max(masked.lastIndexOf('}', loop.index), masked.lastIndexOf('{', loop.index));
+      const scopeText = masked.slice(scopeStart + 1, loop.index);
+      const constNames = new Set();
+      const declaration = new RegExp(declarationPattern.source, 'g');
+      let d;
+      while ((d = declaration.exec(scopeText)) !== null) constNames.add(d[1]);
+      // Restrict the body to straight-line code; conditionals, nested blocks,
+      // short-circuit expressions and calls can make hoisting observably different.
+      if (/[{}?:]|&&|\|\||\b(?:if|switch|case|return|goto|try|catch)\b|\b[A-Za-z_]\w*\s*\(/.test(body) || /\bvolatile\b/.test(source.slice(loop.index, close))) continue;
+      const assigned = new Set();
+      const assignmentPattern = /(?:\+\+|--)?\s*([A-Za-z_]\w*)\s*(?:\+\+|--|(?:[+\-*/%]?=)(?!=|>))/g;
+      let a;
+      while ((a = assignmentPattern.exec(body)) !== null) assigned.add(a[1]);
+      const expressionPattern = /\b([A-Za-z_]\w*|\d+(?:\.\d+)?(?:[fF])?)\s*(\*|\+|-)\s*([A-Za-z_]\w*|\d+(?:\.\d+)?(?:[fF])?)(?![\w.(])/g;
+      const occurrences = new Map();
+      let e;
+      while ((e = expressionPattern.exec(body)) !== null) {
+        const left = e[1], op = e[2], right = e[3];
+        if (op === '-' && e.index > 0 && /[=!<>+\-*\/%&|]/.test(body[e.index - 1])) continue;
+        const leftId = /^[A-Za-z_]/.test(left), rightId = /^[A-Za-z_]/.test(right);
+        if ((leftId && (!constNames.has(left) || assigned.has(left))) ||
+            (rightId && (!constNames.has(right) || assigned.has(right)))) continue;
+        const text = e[0].replace(/\s+/g, ' ').trim();
+        const key = text;
+        if (!occurrences.has(key)) occurrences.set(key, { count: 0, occurrences: [], expression: e[0].trim() });
+        const entry = occurrences.get(key);
+        entry.count++;
+        entry.occurrences.push({ offset: bodyStart + e.index, original: e[0] });
+      }
+      const repeated = [...occurrences.entries()].find(([, entry]) => entry.count >= 2);
+      if (!repeated) continue;
+      const entry = repeated[1];
+      // Require both references to be in unconditional straight-line statements.
+      // This conservative rule avoids evaluating a skipped conditional expression.
+      const indentStart = source.lastIndexOf('\n', loop.index) + 1;
+      const loopIndent = (source.slice(indentStart, loop.index).match(/^\s*/) || [''])[0];
+      let name;
+      do { name = '_mirage_cached_' + (++loopIndex); } while (masked.includes(name));
+      const insertOffset = bodyStart;
+      const declarationText = '\n' + loopIndent + '  const auto ' + name + ' = ' + entry.expression + ';';
+      changes.push({
+        id: 'cache-repeated-loop-arithmetic', rule: 'Reuse repeated arithmetic in loop body',
+        reason: 'Repeated pure arithmetic uses only explicit const scalar operands/literals and occurs in a straight-line loop body.',
+        caution: 'Review the diff, compile with the project toolchain, run correctness tests, and benchmark. This lexical analysis cannot prove all C++ semantics.',
+        original: '', replacement: declarationText, offset: insertOffset, line: lineAt(source, insertOffset),
+        confidence: 'medium'
+      });
+      for (const occurrence of entry.occurrences) {
+        const offset = occurrence.offset;
+        changes.push({
+          id: 'replace-repeated-loop-arithmetic', rule: 'Use cached arithmetic value',
+          reason: 'Reuses the temporary introduced at the beginning of this loop body.',
+          caution: 'Only generated for simple repeated arithmetic with explicit const scalar operands/literals.',
+          original: occurrence.original,
+          replacement: name, offset, line: lineAt(source, offset), confidence: 'medium'
+        });
+      }
+    }
+    return changes;
   }
 
   function optimizeSource(source, filename) {
@@ -180,6 +331,8 @@
       }
     ];
 
+    candidates.push(...findStructuralRewrites(source, masked));
+
     for (const rule of rules) {
       rule.pattern.lastIndex = 0;
       let match;
@@ -206,8 +359,8 @@
     for (const change of changes.slice().sort((a, b) => b.offset - a.offset)) {
       optimized = optimized.slice(0, change.offset) + change.replacement + optimized.slice(change.offset + change.original.length);
     }
-    return { source: optimized, changes, opportunities: findOpportunities(source, masked).concat(findStructuralOpportunities(source, masked)), skipped: null };
+    return { source: optimized, changes, opportunities: findOpportunities(source, masked).concat(findStructuralOpportunities(source, masked), findFunctionAwareOpportunities(source, masked)), skipped: null };
   }
 
-  root.MirageOptimizationEngine = Object.freeze({ optimizeSource, maskNonCode, version: '0.3.0' });
+  root.MirageOptimizationEngine = Object.freeze({ optimizeSource, maskNonCode, version: '0.4.0' });
 })(typeof window !== 'undefined' ? window : globalThis);
