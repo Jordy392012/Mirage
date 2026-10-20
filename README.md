@@ -4,7 +4,7 @@
 
 MIRAGE's long-term goal is to help developers find ways to make embedded applications faster and handle larger working sets with limited physical RAM. This repository is the first UI + static-analysis prototype, not yet an optimizing compiler.
 
-## What works in v0.3
+## What works in the current prototype
 
 - Paste and edit C/C++ source in the browser.
 - Import supported source/build files individually or import a ZIP project archive.
@@ -18,11 +18,15 @@ MIRAGE's long-term goal is to help developers find ways to make embedded applica
 
 The project ZIP reader is loaded from jsDelivr (JSZip). Source code is read and analyzed in the browser; this app does not upload source code to a MIRAGE server.
 
-The project ZIP reader is loaded from jsDelivr (JSZip). Source code is read and analyzed in the browser; this app does not upload source code to a MIRAGE server.
+## Benchmarking
+
+The first ESP32-S3 benchmark fixture compares `powf(x, 2.0f)` with `x * x` on-device. See [benchmarks/README.md](benchmarks/README.md) for setup and reporting guidance.
+
+This is a measured experiment, not a guaranteed optimization. Compiler settings can change the result, and the compiler may already optimize the original expression. The sketch's heap readings are not total RAM usage or static memory size.
 
 ## Important limitations
 
-- This version does **not** compile firmware, execute user code, apply source optimizations, or benchmark an ESP32.
+- This version does **not** compile firmware, execute user code, apply source optimizations, or benchmark an ESP32 from the website.
 - Finding cards are heuristics, not proof of a bottleneck or an instruction to modify code blindly.
 - The array estimate is partial. It counts selected literal-sized declarations that the scanner recognizes; it is not total RAM usage, total static memory, or a substitute for an ESP-IDF linker map and runtime measurements.
 - The visual roadmap describes planned research and is not a claim that those capabilities have already been implemented.
