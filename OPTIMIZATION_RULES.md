@@ -1,4 +1,4 @@
-# MIRAGE Optimization Engine (v0.2.0)
+# MIRAGE Optimization Engine (v0.3.0)
 
 MIRAGE currently combines narrow source-rewrite candidates with static optimization hints. Neither is a guarantee of faster execution. The browser version does not compile C++ or benchmark firmware. Build for the exact board, run correctness tests, and measure before accepting a performance claim.
 
@@ -22,3 +22,10 @@ The analyzer also flags patterns worth inspecting: expensive math near loops, Se
 ## Planned work
 
 The next passes should be based on stronger parsing and type/control-flow context: repeated invariant calculations, bounds-checked buffer strategies, loop transformations, expensive call-site analysis, and target-aware ESP32/ESP-IDF guidance. More aggressive edits should wait for compile checks and regression tests.
+
+
+## Structural loop analysis (v0.3.0)
+
+MIRAGE scans braced `for` and `while` loop bodies for repeated simple arithmetic expressions. When an expression appears at least twice and its named operands are not visibly assigned in that body, it reports a review hint. The analyzer does not move code or automatically hoist expressions.
+
+**Limitations:** this is a lightweight lexical heuristic, not a C++ parser or data-flow analysis. Pointer/reference aliases, writes through arrays or objects, function side effects, macros, `volatile`, concurrency, exceptions, control flow and language-specific operator behavior can invalidate a suggestion. A report is not proof that an expression is loop-invariant or that hoisting will be faster; the compiler may already optimize it. Compile and test any manual change, then benchmark on the target ESP32.

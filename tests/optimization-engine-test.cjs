@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 require('../optimization-engine.js');
 const engine = global.MirageOptimizationEngine;
-assert.equal(engine.version, '0.2.0');
+assert.equal(engine.version, '0.3.0');
 const tests = [
   ['square', 'float a = powf(x, 2);', '(x * x)', 'power-two-to-multiply'],
   ['square decimal exponent', 'float a = pow(values[i], 2.0);', '(values[i] * values[i])', 'power-two-to-multiply'],
@@ -29,4 +29,30 @@ const advice = engine.optimizeSource('void loop(){ for(int i=0;i<100;i++){ Seria
 assert.ok(advice.opportunities.some(item => item.id === 'math-in-loop'));
 assert.ok(advice.opportunities.some(item => item.id === 'serial-in-loop'));
 assert.ok(advice.opportunities.some(item => item.id === 'dynamic-allocation'));
-console.log('optimization-engine tests passed:', tests.length + 5, 'checks');
+
+const repeatedLoop = engine.optimizeSource(
+  'void loop() { for (int i = 0; i < 10; ++i) { out[i] = scale * 0.5f; other[i] = scale * 0.5f; } }',
+  'loop.cpp'
+);
+assert.ok(repeatedLoop.opportunities.some(item => item.id === 'repeated-loop-expression'),
+  'should detect repeated arithmetic in a braced loop when named operands are not assigned');
+const mutatedLoop = engine.optimizeSource(
+  'void loop() { for (int i = 0; i < 10; ++i) { scale = scale + 1; out[i] = scale * 2; other[i] = scale * 2; } }',
+  'loop.cpp'
+);
+assert.ok(!mutatedLoop.opportunities.some(item => item.id === 'repeated-loop-expression'),
+  'should not suggest hoisting an expression whose named operand is assigned in the loop');
+const nonLoopRepeat = engine.optimizeSource(
+  'void run() { out = scale * 2; other = scale * 2; }',
+  'loop.cpp'
+);
+assert.ok(!nonLoopRepeat.opportunities.some(item => item.id === 'repeated-loop-expression'),
+  'should only report repeated expressions inside braced loops');
+const commentedRepeat = engine.optimizeSource(
+  'void loop() { for (int i=0; i<10; ++i) { out = scale * 2; // scale * 2\n } }',
+  'loop.cpp'
+);
+assert.ok(!commentedRepeat.opportunities.some(item => item.id === 'repeated-loop-expression'),
+  'comments must not count as repeated arithmetic');
+
+console.log('optimization-engine tests passed:', tests.length + 9, 'checks');

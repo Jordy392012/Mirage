@@ -78,6 +78,55 @@
     return out;
   }
 
+  // Structural loop pass: advisory only; it never edits source.
+  // This is a lightweight lexical scan, not a C++ parser or proof of invariance.
+  function findStructuralOpportunities(source, masked) {
+    const out = [];
+    const loopPattern = /\b(for|while)\s*\([^)]*\)\s*\{/g;
+    let loop;
+    while ((loop = loopPattern.exec(masked)) !== null) {
+      const open = loop.index + loop[0].lastIndexOf('{');
+      let depth = 1;
+      let close = open + 1;
+      for (; close < masked.length && depth > 0; close++) {
+        if (masked[close] === '{') depth++;
+        else if (masked[close] === '}') depth--;
+      }
+      if (depth !== 0) continue;
+      const bodyStart = open + 1;
+      const body = masked.slice(bodyStart, close - 1);
+      const assigned = new Set();
+      const assignmentPattern = /(?:\+\+|--)?\s*([A-Za-z_]\w*)\s*(?:\+\+|--|(?:[+\-*/%]?=)(?!=|>))/g;
+      let assignment;
+      while ((assignment = assignmentPattern.exec(body)) !== null) assigned.add(assignment[1]);
+      const expressionPattern = /\b([A-Za-z_]\w*)\s*(?:\*|\+|-|\/)\s*([A-Za-z_]\w*|\d+(?:\.\d+)?(?:[fF])?)(?![\w.(])/g;
+      const occurrences = new Map();
+      let expression;
+      while ((expression = expressionPattern.exec(body)) !== null) {
+        const key = expression[0].trim().replace(/\s+/g, ' ');
+        const left = expression[1];
+        const right = expression[2];
+        if (assigned.has(left) || (/^[A-Za-z_]/.test(right) && assigned.has(right))) continue;
+        const entry = occurrences.get(key) || { count: 0, offset: bodyStart + expression.index };
+        entry.count++;
+        occurrences.set(key, entry);
+      }
+      const repeated = [...occurrences.entries()].find(([, entry]) => entry.count >= 2);
+      if (repeated) {
+        const [expressionText, entry] = repeated;
+        out.push({
+          id: 'repeated-loop-expression',
+          title: 'Repeated arithmetic inside a loop',
+          severity: 'medium',
+          line: lineAt(source, entry.offset),
+          reason: 'The same simple arithmetic expression appears multiple times in one braced loop body, and its named operands are not visibly assigned in that body.',
+          suggestion: 'Review whether this expression can be computed once and reused. Check scope, operand lifetime, pointer/reference writes, volatile data, side effects, control flow, integer overflow and floating-point behavior first. This is not an automatic rewrite or a proof of loop invariance.'
+        });
+      }
+    }
+    return out;
+  }
+
   function optimizeSource(source, filename) {
     source = String(source || '');
     const extension = String(filename || '').toLowerCase().match(/\.[^.\/]+$/)?.[0] || '';
@@ -157,8 +206,8 @@
     for (const change of changes.slice().sort((a, b) => b.offset - a.offset)) {
       optimized = optimized.slice(0, change.offset) + change.replacement + optimized.slice(change.offset + change.original.length);
     }
-    return { source: optimized, changes, opportunities: findOpportunities(source, masked), skipped: null };
+    return { source: optimized, changes, opportunities: findOpportunities(source, masked).concat(findStructuralOpportunities(source, masked)), skipped: null };
   }
 
-  root.MirageOptimizationEngine = Object.freeze({ optimizeSource, maskNonCode, version: '0.2.0' });
+  root.MirageOptimizationEngine = Object.freeze({ optimizeSource, maskNonCode, version: '0.3.0' });
 })(typeof window !== 'undefined' ? window : globalThis);
