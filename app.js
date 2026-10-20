@@ -194,44 +194,11 @@ void loop() {
     const copyMatch = /\b(?:memcpy|memmove)\s*\(/.exec(source);
     if (copyMatch) add('memory-copy', 'speed', 'low', 'Memory-copy operation detected', 'Large or repeated copies can consume time and create extra peak-memory demand.', 'Check whether the copy is needed, whether buffers can be reused, or whether the consumer can process the source directly. Do not remove copies that protect aliasing or ownership.', copyMatch.index);
 
-    // Resolve simple integer constants so declarations such as float buffer[N] are counted.
-    // This is deliberately a small source heuristic, not a full C++ preprocessor/parser.
-    const integerConstants = new Map();
-    const constantRegex = /\b(?:(?:static|inline)\s+)*(?:constexpr|const)\s+(?:(?:unsigned|signed)\s+)?(?:char|short(?:\s+int)?|int|long(?:\s+int)?|size_t|u?int(?:8|16|32|64)_t)\s+([A-Za-z_]\w*)\s*=\s*(\d+)\s*;/g;
-    let constantMatch;
-    while ((constantMatch = constantRegex.exec(source)) !== null) {
-      const value = Number(constantMatch[2]);
-      if (Number.isSafeInteger(value) && value > 0) integerConstants.set(constantMatch[1], value);
-    }
-
-    const allocationArrayRegex = /(?:^|[;{}\n])\s*(?:(?:static|constexpr|const|volatile|PROGMEM|extern|inline)\s+)*(unsigned\s+)?(char|short(?:\s+int)?|int|long(?:\s+int)?|float|double|bool|byte|size_t|u?int(?:8|16|32|64)_t)\s+([A-Za-z_]\w*)\s*((?:\s*\[\s*(?:\d+|[A-Za-z_]\w*)\s*\])+)(?:\s*=\s*[^;]*)?\s*;/g;
-    const seen = new Set();
-    let match;
-    while ((match = allocationArrayRegex.exec(source)) !== null) {
-      const type = `${match[1] ? 'unsigned ' : ''}${match[2]}`.replace(/\s+/g, ' ').trim();
-      const dimTokens = [...match[4].matchAll(/\[\s*(\d+|[A-Za-z_]\w*)\s*\]/g)].map(part => part[1]);
-      const dims = dimTokens.map(token => /^\d+$/.test(token) ? Number(token) : integerConstants.get(token));
-      if (dims.some(value => value === undefined)) continue;
-      if (!dims.length || dims.some(n => !Number.isSafeInteger(n) || n < 1)) continue;
-      const byteType = TYPE_BYTES[type] ?? TYPE_BYTES[match[2]];
-      if (!byteType) continue;
-      const count = dims.reduce((product, value) => product * value, 1);
-      const bytes = count * byteType;
-      if (!Number.isSafeInteger(bytes) || seen.has(match[3])) continue;
-      seen.add(match[3]);
-      // Store array matches as structured observations; a large one also becomes a finding.
-      arrayObservations.push({ file: file.name, name: match[3], type, dimensions: dims, bytes, line: lineOf(match.index + match[0].indexOf(match[2])) });
-      if (bytes >= 8192) {
-        add(`large-array-${match[3]}`, 'memory', 'medium', `Large array: ${match[3]}`, `${match[3]} is declared as ${type} with ${dims.join(' × ')} element${count === 1 ? '' : 's'} (about ${formatBytes(bytes)} of storage at this type size).`, 'Check whether the whole array must be resident at once. Depending on access patterns, chunking, smaller element types, flash-backed constants, or external PSRAM may help.', match.index);
-      }
-    }
-
-    // Very long literal arrays often dominate static storage; the parsed array inventory is shown separately.
-    const suspiciousStack = /\b(?:char|short|int|long|float|double|uint\d+_t|int\d+_t)\s+[A-Za-z_]\w*\s*\[\s*(\d{4,})\s*\]/.exec(source);
-    if (suspiciousStack && !list.some(item => item.id.startsWith('large-array-'))) {
-      add('large-array-scope', 'memory', 'low', 'Large array declaration detected', 'A large fixed-size array appears in the source. If it is a local variable, it may use task stack space; if global, it contributes to static memory.', 'Confirm the array scope and measured placement in the linker map. Consider streaming or reusing storage if the full array is not needed simultaneously.', suspiciousStack.index);
-    }
-
+    // Inventory supported built-in array declarations with a separate scanner.
+    // Unknown dimensions remain null; they are never silently treated as 0 bytes.
+    const memoryScan = window.MirageMemoryAnalyzer.scanArrayDeclarations(source, file.name);
+    memoryScan.arrays.forEach(item => arrayObservations.push(item));
+    memoryScan.findings.forEach(item => add(item.id, 'memory', item.severity, item.title, item.detail, item.recommendation, item.offset));
     return list;
   }
 
@@ -318,13 +285,15 @@ void loop() {
       const severityRank = { high: 0, medium: 1, low: 2 };
       return (severityRank[a.severity] ?? 3) - (severityRank[b.severity] ?? 3) || a.line - b.line;
     });
-    const knownArrayBytes = arrayObservations.reduce((sum, item) => sum + item.bytes, 0);
+    const knownArrayBytes = arrayObservations.reduce((sum, item) => sum + (item.includedInTotal && Number.isFinite(item.bytes) ? item.bytes : 0), 0);
+    const knownSizeArrayCount = arrayObservations.filter(item => Number.isFinite(item.bytes)).length;
+    const unknownSizeArrayCount = arrayObservations.filter(item => !Number.isFinite(item.bytes)).length;
     lastReport = {
-      tool: 'MIRAGE Studio', version: '0.1.0', target: 'ESP32-S3', analysisType: 'static heuristic scan', generatedAt: new Date().toISOString(),
-      limitations: ['This report is not a compiler output or hardware benchmark.', 'Array storage is a partial estimate based on matched literal-sized declarations; it is not total RAM usage.', 'Findings are heuristics and must be reviewed by a developer.'],
-      summary: { files: projectFiles.length, sourceLines: totalSourceLines, findings: findings.length, matchedArrayCount: arrayObservations.length, matchedArrayBytes: knownArrayBytes },
+      tool: 'MIRAGE Studio', version: '0.4.0', target: 'ESP32-S3', analysisType: 'static heuristic scan', generatedAt: new Date().toISOString(),
+      limitations: ['This report is not compiler output, a linker map, or a hardware benchmark.', 'Array inventory covers a limited set of built-in-type declarations. Unsupported expressions remain unknown; reported bytes are source-level estimates, not total RAM or peak live memory.', 'Storage class and memory-section labels are hints only; verify actual placement with the ESP-IDF linker map and runtime measurements.', 'Findings are heuristics and must be reviewed by a developer.'],
+      summary: { files: projectFiles.length, sourceLines: totalSourceLines, findings: findings.length, matchedArrayCount: arrayObservations.length, knownSizeArrayCount, unknownSizeArrayCount, matchedArrayBytes: knownArrayBytes },
       files: projectFiles.map(file => ({ name: file.name, lines: file.content ? file.content.split('\n').length : 0, characters: file.content.length })),
-      arrays: arrayObservations.map(({ file, name, type, dimensions, bytes, line }) => ({ file, name, type, dimensions, bytes, line })),
+      arrays: arrayObservations.map(({ file, name, type, dimensions, dimensionExpressions, bytes, line, scopeDepth, storageClass, includedInTotal, sizeKnown }) => ({ file, name, type, dimensions, dimensionExpressions, bytes, line, scopeDepth, storageClass, includedInTotal, sizeKnown })),
       findings: findings.map(({ id, category, severity, title, detail, recommendation, file, line, excerpt }) => ({ id, category, severity, title, detail, recommendation, file, line, excerpt }))
     };
     renderAnalysis(knownArrayBytes, totalSourceLines);
@@ -356,6 +325,8 @@ void loop() {
       ['Source lines', totalSourceLines.toLocaleString()],
       ['Potential findings', findings.length.toString()],
       ['Matched array storage', formatBytes(knownArrayBytes)],
+      ['Array declarations', arrayObservations.length.toString()],
+      ['Unresolved array sizes', arrayObservations.filter(item => !Number.isFinite(item.bytes)).length.toString()],
       ['Measured speedup', 'Not measured']
     ];
     rows.forEach(([label, value]) => {
@@ -409,19 +380,60 @@ void loop() {
     const root = $('#memorySignals'); root.replaceChildren();
     const memoryFindings = findings.filter(item => item.category === 'memory');
     const signals = [];
-    if (arrayObservations.length) signals.push({ icon: '▦', kind: 'memory', title: `${arrayObservations.length} known-size array${arrayObservations.length === 1 ? '' : 's'} matched`, text: `${formatBytes(arrayObservations.reduce((sum, array) => sum + array.bytes, 0))} combined estimated storage; verify the map file and placement.` });
-    if (memoryFindings.length) memoryFindings.forEach(item => signals.push({ icon: '!', kind: 'memory', title: item.title, text: `${item.file}:${item.line} — ${item.detail}` }));
-    if (!signals.length) signals.push({ icon: 'i', kind: '', title: 'No recognized memory-risk pattern', text: 'This limited scan did not find supported memory patterns. It cannot measure heap, task stack, or total firmware RAM use.' });
+    const knownBytes = arrayObservations.reduce((sum, item) => sum + (item.includedInTotal && Number.isFinite(item.bytes) ? item.bytes : 0), 0);
+    const knownCount = arrayObservations.filter(item => item.includedInTotal && Number.isFinite(item.bytes)).length;
+    const unknownCount = arrayObservations.filter(item => !Number.isFinite(item.bytes)).length;
+    if (arrayObservations.length) signals.push({
+      icon: '▦', kind: 'memory',
+      title: arrayObservations.length + ' array declaration' + (arrayObservations.length === 1 ? '' : 's') + ' inventoried',
+      text: formatBytes(knownBytes) + ' combined size estimate for ' + knownCount + ' sized declaration' + (knownCount === 1 ? '' : 's') + '; ' + unknownCount + ' size' + (unknownCount === 1 ? '' : 's') + ' unresolved. This is not a total-RAM measurement.'
+    });
+    if (memoryFindings.length) memoryFindings.forEach(item => signals.push({ icon: '!', kind: 'memory', title: item.title, text: item.file + ':' + item.line + ' — ' + item.detail }));
+    if (!signals.length) signals.push({ icon: 'i', kind: '', title: 'No recognized memory-risk pattern', text: 'This limited scan cannot measure heap, task stack, or total firmware RAM usage.' });
     signals.slice(0, 8).forEach(signal => {
       const row = document.createElement('div'); row.className = 'signal-row';
-      const icon = document.createElement('span'); icon.className = `signal-icon ${signal.kind}`; icon.textContent = signal.icon;
+      const icon = document.createElement('span'); icon.className = 'signal-icon ' + signal.kind; icon.textContent = signal.icon;
       const copy = document.createElement('div'); copy.className = 'signal-copy';
       const title = document.createElement('strong'); title.textContent = signal.title;
       const detail = document.createElement('span'); detail.textContent = signal.text;
       copy.append(title, detail); row.append(icon, copy); root.append(row);
     });
-  }
 
+    const divider = document.createElement('div'); divider.className = 'snapshot-divider'; root.append(divider);
+    const heading = document.createElement('div'); heading.className = 'panel-eyebrow'; heading.textContent = 'ARRAY INVENTORY'; root.append(heading);
+    const note = document.createElement('p');
+    note.className = 'signal-empty';
+    note.textContent = 'Estimated byte sizes use common ESP32-S3 type sizes. Scope and section labels are clues only; inspect the linker map to confirm placement.';
+    root.append(note);
+
+    if (!arrayObservations.length) {
+      const empty = document.createElement('div'); empty.className = 'signal-empty';
+      empty.textContent = 'No supported built-in-type array declarations found. Heap allocations, structs, STL containers, and compiler-added data are not included in this inventory.';
+      root.append(empty);
+      return;
+    }
+    const orderedArrays = [...arrayObservations].sort((a, b) => {
+      const aSize = Number.isFinite(a.bytes) ? a.bytes : -1;
+      const bSize = Number.isFinite(b.bytes) ? b.bytes : -1;
+      return bSize - aSize;
+    });
+    orderedArrays.slice(0, 24).forEach(array => {
+      const row = document.createElement('div'); row.className = 'signal-row';
+      const icon = document.createElement('span'); icon.className = 'signal-icon memory'; icon.textContent = Number.isFinite(array.bytes) ? '▦' : '?';
+      const copy = document.createElement('div'); copy.className = 'signal-copy';
+      const dimensions = array.dimensionExpressions && array.dimensionExpressions.length ? array.dimensionExpressions.join(' × ') : '?';
+      const title = document.createElement('strong');
+      title.textContent = array.name + ' — ' + (Number.isFinite(array.bytes) ? formatBytes(array.bytes) : 'size unknown');
+      const detail = document.createElement('span');
+      detail.textContent = array.file + ':' + array.line + ' · ' + array.type + '[' + dimensions + '] · ' + array.storageClass;
+      copy.append(title, detail); row.append(icon, copy); root.append(row);
+    });
+    if (orderedArrays.length > 24) {
+      const more = document.createElement('div'); more.className = 'signal-empty';
+      more.textContent = (orderedArrays.length - 24) + ' more declarations are included in the exported report.';
+      root.append(more);
+    }
+  }
   async function importFiles(fileList) {
     const incoming = [...fileList];
     if (!incoming.length) return;
